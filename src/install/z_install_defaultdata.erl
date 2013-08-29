@@ -29,8 +29,23 @@
 ]).
 
 
+install(basesite, Context) ->
+    Datamodel = #datamodel{
+         resources =
+             [
+              {page_home,
+               text,
+               [{title, <<"Home">>},
+                {summary, <<"Welcome to your new site!">>},
+                {page_path, <<"/">>}]
+              }
+             ]
+        },
+    ?DEBUG("Installing basesite data"),
+    z_datamodel:manage(?MODULE, Datamodel, Context);
+
 install(blog, Context) ->
-    Now = {{2010,04,03},{9,12,0}},
+    Now = {{2012,12,14},{9,12,0}},
     Datamodel = 
         #datamodel{
       resources =
@@ -48,7 +63,7 @@ install(blog, Context) ->
        {page_about,
         text,
         [{title, <<"About this blog">>},
-         {summary, <<"This is your blog!! It would be wise to type some text here on what you will be writing about. Ofcourse, this page is just a demo page and can be deleted just as well.">>}]
+         {summary, <<"This is your blog!! It would be wise to type some text here on what you will be writing about. Of course, this page is just a demo page and can be deleted just as well.">>}]
        },
 
        {page_contact,
@@ -114,8 +129,8 @@ install(blog, Context) ->
          {summary, <<"Taken by Grant MacDonald from Flickr, CC licensed Attribution-Noncommercial 2.0.">>}]
        },
        {media_video,
-        {<<"vimeo">>, <<"<object width=\"400\" height=\"225\"><param name=\"allowfullscreen\" value=\"true\" /><param name=\"allowscriptaccess\" value=\"always\" /><param name=\"movie\" value=\"http://vimeo.com/moogaloop.swf?clip_id=7630916&amp;server=vimeo.com&amp;show_title=1&amp;show_byline=0&amp;show_portrait=0&amp;color=&amp;fullscreen=1\" /><embed src=\"http://vimeo.com/moogaloop.swf?clip_id=7630916&amp;server=vimeo.com&amp;show_title=1&amp;show_byline=0&amp;show_portrait=0&amp;color=&amp;fullscreen=1\" type=\"application/x-shockwave-flash\" allowfullscreen=\"true\" allowscriptaccess=\"always\" width=\"400\" height=\"225\"></embed></object>">>},
-          [{title, <<"Zotonic introduction video">>}]
+        [{title, <<"Zotonic introduction video">>},
+         {oembed_url, <<"http://vimeo.com/7630916">>}]
        }
       ],
 
@@ -137,7 +152,7 @@ install(blog, Context) ->
       ]
      },
 
-    ?DEBUG("Installin blog data"),
+    ?DEBUG("Installing blog data"),
     z_datamodel:manage(?MODULE, Datamodel, Context);
 
 
@@ -168,4 +183,4 @@ default_skeleton_menu(_) ->
 %% @doc Helper function for getting an absolute path to a data file
 %%      that is part of the default data for a site skeleton.
 datafile(Skeleton, Filename) ->
-    filename:join([z_utils:lib_dir(src), "install", "defaultdata", Skeleton, Filename]).
+    filename:join([z_utils:lib_dir(priv), "install", Skeleton, Filename]).

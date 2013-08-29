@@ -1,6 +1,5 @@
 %% @author Arjan Scherpenisse <arjan@scherpenisse.net>
 %% @copyright 2011 Arjan Scherpenisse <arjan@scherpenisse.net>
-%% Date: 2011-09-22
 %% @doc Handle the OAuth callback from the Twitter
 %% handshake. Exchanges request token (from session) with access
 %% token.
@@ -25,7 +24,7 @@
 -export([init/1, service_available/2, charsets_provided/2, content_types_provided/2]).
 -export([resource_exists/2, previously_existed/2, moved_temporarily/2]).
 
--include_lib("webmachine_controller.hrl").
+-include_lib("controller_webmachine_helper.hrl").
 -include_lib("include/zotonic.hrl").
 
 init(DispatchArgs) -> {ok, DispatchArgs}.
@@ -70,7 +69,6 @@ moved_temporarily(ReqData, Context) ->
 
 %% @doc Redirect user to a signup failure URL, or to the logon page.
 redirect_error(Reason, Context) ->
-    ?DEBUG({?MODULE, Reason}),
     z_context:set_session(twitter_logon, false, Context),
     z_context:set_session(twitter_access_token, undefined, Context),
     Location = case z_notifier:first(#signup_failed_url{reason=Reason}, Context) of
@@ -78,7 +76,7 @@ redirect_error(Reason, Context) ->
                    undefined ->
                        z_context:abs_url(z_dispatcher:url_for(logon, Context), Context)
                end,
-    ?WM_REPLY({true, Location}, Context).
+    ?WM_REPLY({true, z_convert:to_list(Location)}, Context).
 
 
 
@@ -101,21 +99,20 @@ logon_twitter_user(TwitterProps, LocationAfterSignup0, Context) ->
         undefined ->
             % Register the Twitter identities as verified
             SignupProps = [
-                {identity, {username_pw, {z_utils:generate_username(Props, Context), z_ids:id(6)}, true, true}},
+                {identity, {username_pw, {z_utils:generate_username(Props, Context), z_ids:id(10)}, true, true}},
                 {identity, {twitter, UID, true, true}},
                 {identity, {twitter_screenname, proplists:get_value(screen_name, TwitterProps), true, true}},
                 {ready_page, LocationAfterSignup}
             ],
             case z_notifier:first(#signup_url{props=Props, signup_props=SignupProps}, Context) of
                 {ok, Location} ->
-                    use_see_other(Location, Context);
-                    %?WM_REPLY({true, Location}, Context);
+                    ?WM_REPLY({true, Location}, Context);
                 undefined ->
                     throw({error, {?MODULE, "No result from signup_url notification handler"}})
             end;
         Row ->
             UserId = proplists:get_value(rsc_id, Row),
-			{Location,Context1} = case z_auth:logon(UserId, Context) of
+            {Location,Context1} = case z_auth:logon(UserId, Context) of
                                                   {ok, ContextUser} ->
                                                       case z_notifier:first(#logon_ready_page{request_page=LocationAfterSignup}, ContextUser) of
                                                           undefined ->
@@ -129,11 +126,8 @@ logon_twitter_user(TwitterProps, LocationAfterSignup0, Context) ->
                                                       end;
                                                   {error, _Reason} ->
                                                       {z_dispatcher:url_for(logon, [{error_uid,UserId}], Context), Context}
-			end,
-            LocationAbs = lists:flatten(z_context:abs_url(Location, Context1)),
-            use_see_other(LocationAbs, Context1)
+            end,
+            LocationAbs = z_convert:to_list(z_context:abs_url(Location, Context1)),
+            ?WM_REPLY({true, LocationAbs}, Context1)
     end.
     
-use_see_other(Location, Context) ->
-    ContextLoc = z_context:set_resp_header("Location", Location, Context),
-    ?WM_REPLY({halt, 303}, ContextLoc).

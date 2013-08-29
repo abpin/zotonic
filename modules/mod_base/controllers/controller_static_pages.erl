@@ -32,7 +32,7 @@
 	 moved_temporarily/2
 	 ]).
 
--include_lib("webmachine_controller.hrl").
+-include_lib("controller_webmachine_helper.hrl").
 -include_lib("zotonic.hrl").
 
 %% These are used for file serving (move to metadata)
@@ -173,7 +173,8 @@ provide_content(ReqData, State) ->
                             %% Render template, prevent caching
                             Context = z_context:set_reqdata(ReqData, State#state.context),
                             Context1 = z_context:ensure_all(Context),
-                            Html = z_template:render(FullPath, State#state.config, Context1),
+                            Vars = z_context:get_all(Context1)++State#state.config,
+                            Html = z_template:render({abs, FullPath}, Vars, Context1),
                             {Html1, Context2} = z_context:output(Html, Context1),
                             ReqData1 = z_context:get_reqdata(Context2),
                             State1 = State#state{context=Context2, use_cache=false, encode_data=false},
@@ -259,7 +260,12 @@ check_resource(ReqData, #state{fullpath=undefined} = State) ->
                             Dir = filename:join(Root, SafePath),
                             case filelib:is_dir(Dir) andalso State#state.allow_directory_index of
                                 true ->
-                                    {ReqData, State#state{path=SafePath, fullpath=Dir, context=Context, mime="text/html"}};
+                                    case last(wrq:path(ReqData)) /= $/ of
+                                        true ->
+                            	            {ReqData, State#state{path=SafePath, fullpath=redir, context=Context}};
+                                        false ->
+                                            {ReqData, State#state{path=SafePath, fullpath=Dir, context=Context, mime="text/html"}}
+                                        end;
                                 false ->
                                     {ReqData, State#state{path=SafePath, fullpath=false, context=Context, mime="text/html"}}
                             end

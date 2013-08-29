@@ -1,9 +1,9 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2009 Marc Worrell
+%% @copyright 2009-2013 Marc Worrell
 %%
 %% Based on code (c) 2008-2009 Rusty Klophaus
 
-%% Copyright 2009 Marc Worrell
+%% Copyright 2009-2013 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ render(Params, _Vars, Context) ->
     Class     = proplists:get_all_values(class, Params),
     Icon      = proplists:get_all_values(icon, Params),
     Style     = proplists:get_value(style, Params),
+    TabIndex  = proplists:get_value(tabindex, Params),
     Type      = proplists:get_value(type, Params),
     Title     = proplists:get_value(title, Params),
     Disabled  = proplists:get_value(disabled, Params, false),
@@ -52,14 +53,16 @@ render(Params, _Vars, Context) ->
 										undefined -> Options1;
 										_ -> [{delegate, Delegate} | Options1]
 									end,
-						z_render:wire(Id, {event,[{type,click}|Options2]}, Context)
+                        Options3  = [ {qarg,X} || {qarg,X} <- Params ] ++ Options2,
+						z_render:wire(Id, {event,[{type,click}|Options3]}, Context)
                end,
 
     Attrs = [
         {<<"id">>,    Id},
         {<<"name">>,  case proplists:is_defined(id, Params) of true -> Id; false -> "" end},
         {<<"style">>, Style},
-        {<<"title">>, Title}
+        {<<"title">>, Title},
+        {<<"tabindex">>, TabIndex}
     ],
     
     {Class1, Attrs1} = case z_convert:to_bool(Disabled) of
@@ -74,7 +77,9 @@ render(Params, _Vars, Context) ->
 
     Text1 = case z_utils:is_empty(Icon) of
                 true -> Text;
-                false -> [<<"<i class=">>, Icon, "></i> ", Text]
+                false ->
+                    [z_tags:render_tag(<<"i">>, [{class, Icon}], ""),
+                     " ", Text]
             end,
     Context2 = z_tags:render_tag(
                         Tag,

@@ -24,7 +24,7 @@
 -export([init/1, service_available/2, charsets_provided/2, content_types_provided/2]).
 -export([resource_exists/2, previously_existed/2, moved_temporarily/2]).
 
--include_lib("webmachine_controller.hrl").
+-include_lib("controller_webmachine_helper.hrl").
 -include_lib("include/zotonic.hrl").
 
 init(DispatchArgs) -> {ok, DispatchArgs}.
@@ -54,12 +54,11 @@ moved_temporarily(ReqData, Context) ->
     z_context:set_session(twitter_request_token, {Token, Secret}, Context),
     z_context:set_session(twitter_ready_page, get_page(Context1), Context1),
 
-    RedirectUrl = lists:flatten(
-                        z_context:abs_url(
+    RedirectUrl = z_context:abs_url(
                             z_dispatcher:url_for(twitter_redirect, [], Context1),
-                            Context1)),
+                            Context1),
     Location = oauth_twitter_client:authorize_url(Token)
-        ++ "&oauth_callback=" ++ z_utils:url_encode(RedirectUrl),
+        ++ "&oauth_callback=" ++ z_convert:to_list(z_utils:url_encode(RedirectUrl)),
     ?WM_REPLY({true, Location}, Context1).
 
 

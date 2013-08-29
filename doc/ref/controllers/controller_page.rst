@@ -15,16 +15,17 @@ This controller also adds a ``noindex`` response header when the page's
 
 Example dispatch rule::
 
-  {page, ["page", id], resource_page, []}
+  {page, ["page", id], controller_page, []}
 
 
 Dispatch arguments
 ------------------
+
 ``controller_page`` recognizes the following arguments inside the dispatch pattern:
 
 +---------------------+-------------------------------------+------------------------+
 |Argument             |Description                          |Example URL             |
-+---------------------+-------------------------------------+------------------------+
++=====================+=====================================+========================+
 |id                   |The id of the page (rsc) to be       |/page/12345             |
 |                     |shown. This can be the numerical id  |                        |
 |                     |or the unique name of a page.        |                        |
@@ -33,11 +34,12 @@ Dispatch arguments
 
 Dispatch options
 ----------------
+
 The following options can be given to the dispatch rule:
 
 +---------------------+-------------------------------------+------------------------+
-|Option               |Description                          |Example URL             |
-+---------------------+-------------------------------------+------------------------+
+|Option               |Description                          |Example                 |
++=====================+=====================================+========================+
 |id                   |Id or unique name of the resource to |{id, page_about}        |
 |                     |be shown. This overrules any id in   |                        |
 |                     |the query arguments.                 |                        |
@@ -45,6 +47,9 @@ The following options can be given to the dispatch rule:
 +---------------------+-------------------------------------+------------------------+
 |template             |Name of the template to be           |{template, "about.tpl"} |
 |                     |rendered. Defaults to “page.tpl”     |                        |
+|                     |Can also be a tuple of the following |{template, {cat, "home. |
+|                     |form: `{cat, Name}`.                 |tpl"}}                  |
+|                     |See also: :ref:`tag-catinclude`.     |                        |
 +---------------------+-------------------------------------+------------------------+
 |cat                  |The category the resource that is    |{cat, text}             |
 |                     |requested has to be. If a page of a  |                        |
@@ -57,3 +62,11 @@ The following options can be given to the dispatch rule:
 |                     |permission on the rsc to be able to  |                        |
 |                     |access the resource.                 |                        |
 +---------------------+-------------------------------------+------------------------+
+|acl                  |Extra authorization checks to be     |See `ACL options`_.     |
+|                     |performed.                           |                        |
++---------------------+-------------------------------------+------------------------+
+
+
+.. include:: acl_options.rst
+
+.. seealso:: :ref:`controller-template`.

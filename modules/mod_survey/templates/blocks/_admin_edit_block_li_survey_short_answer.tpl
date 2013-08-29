@@ -7,40 +7,50 @@
 
 {% block widget_content %}
 {% with m.rsc[id] as r %}
-<fieldset class="form-vertical">
-    <div class="control-group">
     {% if is_editable %}
-        <input type="text" id="block-{{name}}-prompt{{ lang_code_with_dollar }}" name="block-{{name}}-prompt{{ lang_code_with_dollar }}" 
-               class="span8" value="{{ blk.prompt[lang_code]  }}"
+    <div class="control-group">
+        <input type="text" id="block-{{name}}-prompt{{ lang_code_for_id }}" name="block-{{name}}-prompt{{ lang_code_with_dollar }}" 
+               class="input-block-level" value="{{ blk.prompt[lang_code]  }}"
                placeholder="{_ Please enter your name. _} ({{ lang_code }})" />
+    </div>
 
-        <textarea id="block-{{name}}-explanation{{ lang_code_with_dollar }}" name="block-{{name}}-explanation{{ lang_code_with_dollar }}" 
-               class="span8" rows="2"
+    <div class="control-group">
+        <textarea id="block-{{name}}-explanation{{ lang_code_for_id }}" name="block-{{name}}-explanation{{ lang_code_with_dollar }}" 
+               class="input-block-level" rows="2"
                placeholder="{_ Explanation _} ({{ lang_code }})" >{{ blk.explanation[lang_code]  }}</textarea>
+       </div>
 
+    <div class="control-group">
+        <input type="text" id="block-{{name}}-placeholder{{ lang_code_for_id }}" name="block-{{name}}-placeholder{{ lang_code_with_dollar }}" 
+               class="input-block-level" value="{{ blk.placeholder[lang_code]  }}"
+               placeholder="{_ Input value placeholder text _} ({{ lang_code }})" />
+    </div>
+       
     {% else %}
         <p>{{ blk.prompt[lang_code]  }}</p>
     {% endif %}
-    </div>
-</fieldset>
 {% endwith %}
 {% endblock %}
 
 {% block widget_content_nolang %}
-<fieldset class="form-vertical">
     <div class="control-group">
-        <label for="block-{{name}}-validation">{_ Validation _}</label>
-        <select id="block-{{name}}-validation" name="block-{{name}}-validation">
-             <option value=""></option>
-             <option value="email" {% if blk.validation == "email" %}selected="selected"{% endif %}>{_ must be an e-mail address _}</option>
-             <option value="numericality" {% if blk.validation == "numericality" %}selected="selected"{% endif %}>{_ must be a number _}</option>
-        </select>
+        <label class="control-label" for="block-{{name}}-validation">{_ Validation _}</label>
+        <div class="controls">
+            <select id="block-{{name}}-validation" name="block-{{name}}-validation">
+                 <option value=""></option>
+                 <option value="email" {% if blk.validation == "email" %}selected="selected"{% endif %}>{_ must be an e-mail address _}</option>
+                 <option value="numericality" {% if blk.validation == "numericality" %}selected="selected"{% endif %}>{_ must be a number _}</option>
+                 <option value="phone" {% if blk.validation == "phone" %}selected="selected"{% endif %}>{_ must be a phone number _}</option>
+                 <option value="date" {% if blk.validation == "date" %}selected="selected"{% endif %}>{_ must be a date _}</option>
+            </select>
+        </div>
+    </div>
 
+    <div class="control-group">
         <label class="checkbox">
             <input type="checkbox" id="block-{{name}}-is_required" name="block-{{name}}-is_required" value="1" {% if blk.is_required or is_new %}checked="checked"{% endif %} />
             {_ Required, this question must be answered. _}
         </label>
     </div>
-</fieldset>
 {% endblock %}
 

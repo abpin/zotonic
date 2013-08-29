@@ -1,8 +1,8 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2009  Marc Worrell
-%% @doc Request context for zophenic request evaluation.
+%% @copyright 2009-2012  Marc Worrell
+%% @doc Request context for Zotonic request evaluation.
 
-%% Copyright 2009 Marc Worrell
+%% Copyright 2009-2012 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@
     site/1,
     hostname/1,
     hostname_port/1,
+    site_protocol/1,
 
     is_request/1,
 
@@ -117,7 +118,9 @@
 
     cookie_domain/1,
     document_domain/1,
-    streamhost/1
+    streamhost/1,
+    websockethost/1,
+    has_websockethost/1
 ]).
 
 -include_lib("zotonic.hrl").
@@ -320,27 +323,33 @@ prune_for_scomp(VisibleFor, Context) ->
 
 
 %% @doc Make the url an absolute url by prepending the hostname.
-%% @spec abs_url(string(), Context) -> string()
-abs_url(Url, Context) when is_binary(Url) ->
-    abs_url(binary_to_list(Url), Context);
+%% @spec abs_url(iolist(), Context) -> binary()
+abs_url(<<"http:", _/binary>> = Url, _Context) -> Url;
+abs_url(<<"https", _/binary>> = Url, _Context) -> Url;
+abs_url(Url, Context) when is_list(Url) ->
+    abs_url(iolist_to_binary(Url), Context);
 abs_url(Url, Context) ->
     case has_url_protocol(Url) of
-        true ->
-            Url;
-        false ->
-            ["http://", hostname_port(Context), Url]
+        true -> Url;
+        false -> z_convert:to_binary([site_protocol(Context), "://", hostname_port(Context), Url])
     end.
 
-    has_url_protocol([]) ->
+    has_url_protocol(<<>>) ->
         false;
-    has_url_protocol([H|T]) when is_integer($a) andalso H >= $a andalso H =< $z ->
+    has_url_protocol(<<H, T/binary>>) when H >= $a andalso H =< $z ->
         has_url_protocol(T);
-    has_url_protocol([$:|_]) ->
+    has_url_protocol(<<$:, _/binary>>) ->
         true;
     has_url_protocol(_) ->
         false.
 
-
+%% @doc Fetch the protocol for absolute urls referring to the site (defaults to http).
+%%      Useful when the site is behind a https proxy.
+site_protocol(Context) ->
+    case z_convert:to_binary(m_config:get_value(site, protocol, Context)) of
+        <<>> -> <<"http">>;
+        P -> P
+    end.
 
 %% @doc Pickle a context for storing in the database
 %% @todo pickle/depickle the visitor id (when any)
@@ -406,6 +415,8 @@ output1([C|Rest], Context, Acc) ->
         case proplists:get_value(format, Args, "html") of
             "html" ->
                 [ <<"\n\n<script type='text/javascript'>\n$(function() {\n">>, Script, <<"\n});\n</script>\n">> ];
+            "js" ->
+                [ $\n, Script, $\n ];
             "escapejs" ->
                 z_utils:js_escape(Script)
         end.
@@ -839,7 +850,7 @@ set_language(Lang, Context) ->
 %% @doc Set a response header for the request in the context.
 %% @spec set_resp_header(Header, Value, Context) -> NewContext
 set_resp_header(Header, Value, Context = #context{wm_reqdata=ReqData}) ->
-    RD1 = wrq:set_resp_header(Header, Value, ReqData),
+    RD1 = wrq:set_resp_header(Header, z_convert:to_list(Value), ReqData),
     Context#context{wm_reqdata=RD1}.
 
 %% @doc Get a response header
@@ -911,6 +922,21 @@ streamhost(Context) ->
         Domain ->
             Domain
     end.
+
+%% @doc Fetch the domain and port for websocket connections
+%% @spec websockethost(Context) -> list()
+websockethost(Context) ->
+    case m_site:get(websockethost, Context) of
+        Empty when Empty == undefined; Empty == []; Empty == <<>> ->
+            hostname_port(Context);
+        Domain ->
+            Domain
+    end.
+
+%% @doc Return true iff this site has a separately configured websockethost
+%% @spec has_websockethost(Context) -> bool()
+has_websockethost(Context) ->
+    z_convert:to_bool(m_site:get(websockethost, Context)).
 
 
 %% ------------------------------------------------------------------------------------

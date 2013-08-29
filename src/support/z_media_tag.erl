@@ -39,6 +39,7 @@
 
 -include_lib("zotonic.hrl").
 
+-compile([{parse_transform, lager_transform}]).
 
 %% @spec viewer(MediaReference, Options, Context) -> {ok, HtmlFragMent} | {error, Reason}
 %%   MediaReference = Filename | RscId | MediaPropList
@@ -112,7 +113,8 @@ tag(Name, Options, Context, Visited) when is_atom(Name) ->
         {ok, Id} -> tag(Id, Options, Context, Visited);
         _ -> {ok, []}
     end;
-tag(Id, Options, Context, Visited) when is_integer(Id) ->
+tag(Id, Options0, Context, Visited) when is_integer(Id) ->
+    Options = opt_crop_center(Id, Options0, Context),
     case m_media:get(Id, Context) of
         Props when is_list(Props) ->
             case mediaprops_filename(Id, Props, Context) of
@@ -244,7 +246,8 @@ filename_to_urlpath(Filename) ->
 %% @doc Generate the url for the image with the filename and options
 url(undefined, _Options, _Context) ->
     {error, enoent};
-url(Id, Options, Context) when is_integer(Id) ->
+url(Id, Options0, Context) when is_integer(Id) ->
+    Options = opt_crop_center(Id, Options0, Context),
     case m_media:get(Id, Context) of
         Props when is_list(Props) ->
             url(Props, Options, Context);
@@ -278,11 +281,36 @@ url(Filename, Options, Context) ->
 %% @spec url1(Filename, Options, Context) -> {url, Url::binary(), TagOptions, ImageOpts} | {error, Reason}
 %% @doc Creates an url for the given filename and filters.  This does not check the filename or if it is convertible.
 url1(File, Options, Context) ->
+    UrlAndOpts = url2(File, Options, Context),
+    case use_absolute_url(Options, Context) of
+        true ->
+            {url, Url, TagOpts, ImageOpts} = UrlAndOpts, 
+            {url, z_dispatcher:abs_url(Url, Context), TagOpts, ImageOpts};
+        false -> 
+            UrlAndOpts
+    end.
+
+use_absolute_url(Options, Context) ->
+    case use_absolute(proplists:get_value(use_absolute_url, Options)) of
+        false -> false;
+        true -> true;
+        undefined -> z_convert:to_bool(z_context:get(use_absolute_url, Context))
+    end.
+
+use_absolute(undefined) -> undefined;
+use_absolute(<<>>) -> undefined;
+use_absolute([]) -> undefined;
+use_absolute(true) -> true;
+use_absolute(false) -> false;
+use_absolute(A) -> z_convert:to_bool(A).
+
+
+url2(File, Options, Context) ->
     Filename = z_convert:to_list(File),
     {TagOpts, ImageOpts} = lists:partition(fun is_tagopt/1, Options),
     % Map all ImageOpts to an opt string
     MimeFile = z_media_identify:guess_mime(Filename),
-    {_Mime,Extension} = z_media_preview:out_mime(MimeFile, ImageOpts),
+    {_Mime,Extension} = z_media_preview:out_mime(MimeFile, ImageOpts, Context),
     case props2url(ImageOpts, Context) of
         {no_checksum, UrlProps} ->
             PropsQuoted = mochiweb_util:quote_plus(UrlProps),
@@ -348,6 +376,8 @@ props2url([{width,Width}|Rest], _Width, Height, Acc, Context) ->
     props2url(Rest, z_convert:to_integer(Width), Height, Acc, Context);
 props2url([{height,Height}|Rest], Width, _Height, Acc, Context) ->
     props2url(Rest, Width, z_convert:to_integer(Height), Acc, Context);
+props2url([{use_absolute_url,_}|Rest], Width, Height, Acc, Context) ->
+    props2url(Rest, Width, Height, Acc, Context);
 props2url([{mediaclass,Class}|Rest], Width, Height, Acc, Context) ->
     case z_mediaclass:get(Class, Context) of
         {ok, [], <<>>} ->
@@ -393,7 +423,7 @@ url2props(Url, Context) ->
                            _ -> string:tokens(Props, ")(")
                        end,
             FileMime = z_media_identify:guess_mime(Rest),
-            {_Mime, Extension} = z_media_preview:out_mime(FileMime, PropList),
+            {_Mime, Extension} = z_media_preview:out_mime(FileMime, PropList, Context),
             case {Check1,PropList} of
                 {"mediaclass-"++_, []} ->
                     % shorthand with only the mediaclass
@@ -432,4 +462,12 @@ url2props1([P|Rest], Acc) ->
     url2props1(Rest, [Filter|Acc]).
 
 
-    
+
+opt_crop_center(Id, Options, Context) ->
+    case {proplists:get_value(crop, Options), m_rsc:p(Id, crop_center, Context)} of
+        {true, <<"+",_/binary>> = C} ->
+            z_utils:prop_replace(crop, C, Options);
+        {_, _} ->
+            Options
+    end.
+

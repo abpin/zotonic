@@ -38,7 +38,7 @@ Glossary
       An Erlang module which is the main accessor for retrieving data. The Erlang modules are prefixed with `m_`; in the templates they are accessible using .m... For instance, the model to access :term:`resources <resource>` is called ``m_rsc.erl``; in the template this model lets you access resources by id as ``{{ m.rsc[id] }}``.
 
    Service
-      Provides a generalized way to create API calls. These calls automatically use the authentication mechanism (session id or OAuth) to perform access checks.
+      Provides a generalized way to create API calls. These calls automatically use the authentication mechanism (session id or OAuth) to perform access checks. See :ref:`manual-services`.
 
    Validator
       A validator is used to check input fields in a HTML form. A validator has two parts: the client side javascript and a server side check. You add validators to a form with the {% validate %} template tag. A validated query argument can be accessed on the server using z_context:get_q_validated/2.
@@ -56,7 +56,7 @@ Glossary
       The session is an Erlang process. It is connected to the session cookie id on the browser. The session contains the id of the current user and more key/value pairs, called session variables. The session is also linked to page processes. For every open page on the browser we have a process on the server. This page process is used for the communication between the server and the user-agent (browser).
 
    Category
-      The data model has a hierarchical tree for the categorization of resources. Every resource is part of one category. The categorization is used amongst others to decide which template to show when displaying a resource. A category is a resource of the category .category..
+      The data model has a hierarchical tree for the categorization of resources. Every resource is part of one category. The categorization is used amongst others to decide which template to show when displaying a resource. A category is a :term:`resource` of the category `category`. For more information, see :ref:`manual-datamodel-categories`.
 
    Page
       Another word for .resource.; used in the admin.
@@ -83,13 +83,13 @@ Glossary
       A particular configuration of resource categories and predicates, which dictate how resources of certain categories relate to each other. For example, a blog-type site might need `person`, `article` and `keyword` categories, where persons and articles are connected using the `author` predicate to indicate article authorship, and articles might be connected to keywords with `has_keyword` predicates. See :ref:`manual-datamodel`.
       
    Resource
-      The main building block of the :ref:`data model <manual-datamodel>`. For simplicity of communication, a resource is often referred to as a page. Every resource usually has its own page on the web site.
+      The main building block of the :ref:`data model <manual-datamodel>`. For simplicity of communication, a resource is often referred to as a page. Every resource usually has its own page on the web site. See :ref:`manual-datamodel-resources`.
 
    Translation
       There are two kinds of translations. Texts in the templates and Erlang modules; and translations of resources. Templates and Erlang modules are translated using gettext. Resources are translated in the admin, any resource can have an arbitrary number of translations. Zotonic selects the shown language based on the preferred language of the visitor and the available languages of a resource.
 
    Zotonic module
-      A Zotonic module (just .module., for short) is a collection of related functionality like scomps, filters, dispatch rules, controllers, templates, etc. Zotonic modules are located in folders under the modules/ directory and, by convention, are prefixed with `mod_`.
+      A Zotonic module (just .module., for short) is a collection of related functionality like scomps, filters, dispatch rules, controllers, templates, etc. Zotonic modules are located in folders under the modules/ directory and, by convention, are prefixed with `mod_`. See :ref:`manual-modules`.
 
    Zotonic site
       A Zotonic site is a collection of scomps, filters, dispatch rules for one website. It is a special kind of Zotonic module with has its own config file which allows one to set the hostname, admin password, database connection parameters. It often has a set of site specific modules. The config file contains site wide settings. Zotonic uses the settings to start the site on the right port and connect it to the right database. A Zotonic system can run multiple sites.

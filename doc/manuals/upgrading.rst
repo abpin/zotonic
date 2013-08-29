@@ -9,6 +9,16 @@ that require attetion for site developers when things change in
 incompatible ways or get deprecated.
 
 
+Upgrading to Zotonic 0.10
+-------------------------
+
+Config changes
+..............
+
+All configuration options regarding logging are now in set in the ``priv/erlang.config`` file,
+which is created by default if misssing from ``priv/erlang.config.in``.
+
+
 Upgrading to Zotonic 0.9
 ------------------------
 
@@ -56,13 +66,13 @@ the new include file names.
 
 The following include files have been renamed:
 
-+-------------------------------+---------------------------------+
-|Old filename                   |New filename                     |
-+-------------------------------+---------------------------------+
-|include/resource_html.hrl      |include/html_controller.hrl      |
-+-------------------------------+---------------------------------+
-|include/webmachine_resource.hrl|include/webmachine_controller.hrl|
-+-------------------------------+---------------------------------+
++-------------------------------+----------------------------------------+
+|Old filename                   |New filename                            |
++-------------------------------+----------------------------------------+
+|include/resource_html.hrl      |include/controller_html_helper.hrl      |
++-------------------------------+----------------------------------------+
+|include/webmachine_resource.hrl|include/controller_webmachine_helper.hrl|
++-------------------------------+----------------------------------------+
 
 HTTPS support
 .............
@@ -102,11 +112,24 @@ to::
 mod_backup
 ..........
 
+mod_backup's configuration values for binary path names (`pg_dump` and
+`tar`) is now coming from the global ``z_config`` instead of the
+site's configuration database.
+
 On startup you might see this message::
 
   18:39:59.895 [error] z_module_manager:485 [sitename] Error starting module mod_backup: {error,{missing_dependencies,[rest]}}
 
 mod_backup is now dependent on mod_rest, so you should enable that module in the module manager.
+
+
+mod_survey
+..........
+
+The storage format changed slightly. For the correct display of the
+results of "narrative"-type questions answered before 2012-12-01, the
+name of the block needs to equal the name of the first narrative
+sub-question.
 
 
 z_logger

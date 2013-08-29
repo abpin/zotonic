@@ -29,10 +29,24 @@
 
 ensure_started(App) ->
     case application:start(App) of
-	ok ->
-	    ok;
-	{error, {already_started, App}} ->
-	    ok
+        ok ->
+            ok;
+        {error, {not_started, Dep}} ->
+            case ensure_started(Dep) of
+                ok ->
+                    ensure_started(App);
+                Error ->
+                    Error
+            end;
+        {error, {already_started, App}} ->
+            ok;
+        {error, {Tag, Msg}} when is_list(Tag), is_list(Msg) ->
+                io_lib:format("~s: ~s", [Tag, Msg]);
+        {error, {bad_return, {{M, F, Args}, Return}}} ->
+                A = string:join([io_lib:format("~p", [A])|| A <- Args], ", "),
+                io_lib:format("~s failed to start due to a bad return value from call ~s:~s(~s):~n~p", [App, M, F, A, Return]);
+        {error, Reason} ->
+            io_lib:format("~p", [Reason])
     end.
 
 %% @spec start() -> ok
@@ -42,18 +56,20 @@ start() -> start([]).
 %% @spec start(_Args) -> ok
 %% @doc Start the zotonic server.
 start(_Args) ->
-    ensure_started(lager),
     test_erlang_version(),
     zotonic_deps:ensure(),    
-    ensure_started(crypto),
-    ensure_started(webzmachine),
-    ensure_started(mnesia),
-    ok = application:start(zotonic).
+    case ensure_started(zotonic) of
+        ok -> ok;
+	Message ->
+            lager:error("Zotonic start error: ~s~n", [Message]),
+            init:stop()
+    end.
 
 %% @spec stop() -> ok
 %% @doc Stop the zotonic server.
 stop() ->
     Res = application:stop(zotonic),
+    application:stop(eiconv),
     application:stop(mnesia),
     application:stop(lager),
     application:stop(webzmachine),

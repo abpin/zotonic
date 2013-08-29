@@ -18,12 +18,10 @@
 
 %% The release information
 -include("zotonic_release.hrl").
-
 -include("zotonic_notifications.hrl").
-
 -include("zotonic_events.hrl").
-
--include_lib("deps/webzmachine/include/wm_reqdata.hrl").
+-include("zotonic_stats.hrl").
+-include_lib("webzmachine/include/wm_reqdata.hrl").
 
 %% @doc The request context, session information and other
 -record(context, {
@@ -169,7 +167,7 @@
 -record(dragdrop, {tag, delegate, id}).
 
 %% @doc Template definition for z_render:update/insert (and others)
--record(render, {template, vars=[]}).
+-record(render, {template, is_all=false, vars=[]}).
 
 %% @doc Data import definition. See also mod_import_csv.
 -record(import_data_def, {colsep=$\t, skip_first_row=true, record, importdef}).
@@ -182,6 +180,9 @@
 
 %% The name of the session request parameter
 -define(SESSION_PAGE_Q, "z_pageid").
+
+%% The name of the session user agent class parameter
+-define(SESSION_UA_CLASS_Q, "z_ua").
 
 %% Number of seconds between two comet polls before the page expires
 -define(SESSION_PAGE_TIMEOUT, 20).

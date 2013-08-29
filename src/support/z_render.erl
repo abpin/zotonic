@@ -48,6 +48,8 @@
     insert_before/3,
     insert_after/3,
 
+    update_iframe/3,
+
     appear/3,
     appear_replace/3,
     appear_top/3,
@@ -99,6 +101,7 @@
     growl/4,
     
     make_postback/6,
+    make_postback/7,
     make_postback_info/6,
     make_validation_postback/2,
     make_validation_postback/3,
@@ -290,6 +293,16 @@ appear_before(TargetId, Html, Context) ->
 appear_after(TargetId, Html, Context) ->
     appear_after_selector(css_selector(TargetId), Html, Context).
 
+%% @doc Set the contents of an iframe to the generated html.
+update_iframe(IFrameId, Html, Context) ->
+    {Html1, Context1} = render_html(Html, Context),
+    Document = [<<"window.frames['">>, IFrameId, <<"'].document">>],
+    Update = [ 
+        Document, <<".open();">>,
+        Document, <<".write('">>, z_utils:js_escape(Html1), <<"');">>,
+        Document, <<".close();">>
+    ],
+    Context1#context{updates=[{Update}|Context1#context.updates]}.
 
 %% @doc Set the contents of all elements matching the css selector to the the html fragment 
 update_selector(CssSelector, Html, Context) ->
@@ -403,9 +416,8 @@ update_js_selector_first(CssSelector, Html, Function, AfterEffects) ->
       AfterEffects, 
       $;].
 
-    render_html(#render{template=Template, vars=Vars}, Context) ->
-        {Html, Context1} = z_template:render_to_iolist(Template, Vars, Context),
-        {iolist_to_binary(Html), Context1};
+    render_html(#render{template=Template, is_all=All, vars=Vars}, Context) ->
+        render_html_opt_all(z_convert:to_bool(All), Template, Vars, Context);
     render_html(undefined, Context) ->
         {"", Context};
     render_html(Html, Context) when is_binary(Html) ->
@@ -413,6 +425,15 @@ update_js_selector_first(CssSelector, Html, Function, AfterEffects) ->
     render_html(Html, Context) ->
         {Html1, Context1} = render_to_iolist(Html, Context),
         {iolist_to_binary(Html1), Context1}.
+
+
+    render_html_opt_all(false, Template, Vars, Context) ->
+        {Html, Context1} = z_template:render_to_iolist(Template, Vars, Context),
+        {iolist_to_binary(Html), Context1};
+    render_html_opt_all(true, Template, Vars, Context) ->
+        Templates = z_template:find_template(Template, true, Context),
+        Html = [ z_template:render(Tpl, Vars, Context) || Tpl <- Templates ],
+        render_html(Html, Context).
 
 
 %%% SIMPLE FUNCTION TO SHOW DIALOG OR GROWL (uses the dialog and growl actions) %%%
@@ -459,14 +480,45 @@ make_postback_info(Tag, EventType, TriggerId, TargetId, Delegate, Context) ->
 %% @doc Make a javascript to call the postback, posting an encoded string containing callback information. 
 %% The PostbackTag is send to the server, EventType is normally the atom 'postback'.
 %% @spec make_postback(PostbackTag, EventType, TriggerId, TargetId, Delegate, Context) -> {JavascriptString, PickledPostback}
-make_postback(undefined, _EventType, _TriggerId, _TargetId, _Delegate, _Context) ->
-    {[],[]};
 make_postback(PostbackTag, EventType, TriggerId, TargetId, Delegate, Context) ->
-    PickledPostbackInfo = make_postback_info(PostbackTag, EventType, TriggerId, TargetId, Delegate, Context),
-    {[<<"z_queue_postback('">>,ensure_iolist(TriggerId),<<"', '">>,PickledPostbackInfo,<<"', typeof(zEvtArgs) != 'undefined' ? zEvtArgs : undefined);">>], PickledPostbackInfo}.
+    make_postback(PostbackTag, EventType, TriggerId, TargetId, Delegate, [], Context).
 
-    ensure_iolist(A) when is_atom(A) -> atom_to_list(A);
-    ensure_iolist(L) -> L.
+make_postback(undefined, _EventType, _TriggerId, _TargetId, _Delegate, _QArgs, _Context) ->
+    {[],[]};
+make_postback(PostbackTag, EventType, TriggerId, TargetId, Delegate, QArgs, Context) ->
+    PickledPostbackInfo = make_postback_info(PostbackTag, EventType, TriggerId, TargetId, Delegate, Context),
+    {ZEvtArgsPre, ZEvtArgs} = make_postback_zevtargs(QArgs),
+    {[
+        ZEvtArgsPre,
+        <<"z_queue_postback(">>,
+            postback_trigger_id(TriggerId),
+            <<", '">>,PickledPostbackInfo,
+            <<"', ">>, ZEvtArgs,
+            <<");">>
+     ], 
+     PickledPostbackInfo}.
+
+postback_trigger_id(undefined) -> <<"undefined">>;
+postback_trigger_id(A) when is_atom(A) -> [$', atom_to_list(A), $'];
+postback_trigger_id([32|_CssSel]) -> <<"$(this).attr('id')">>;
+postback_trigger_id(L) -> [$', L, $'].
+
+make_postback_zevtargs([]) ->
+    {<<>>, <<"typeof(zEvtArgs) != 'undefined' ? zEvtArgs : undefined">>};
+make_postback_zevtargs(QArgs) when is_list(QArgs) ->
+    {
+        [
+            <<"var zEvtQArgs = typeof(zEvtArgs) != 'undefined' ? zEvtArgs : [];">>,
+            [
+                begin
+                    QArgB = z_convert:to_binary(QArg),
+                    [<<"zEvtQArgs.push({name:$('#">>, QArgB, <<"').attr('name'), value:$('#">>,QArgB,<<"').val()});">>]
+                end
+                || QArg <- QArgs 
+            ]
+        ],
+        <<"zEvtQArgs">>
+    }.
 
 make_validation_postback(Validator, Context) ->
     make_validation_postback(Validator, {}, Context).

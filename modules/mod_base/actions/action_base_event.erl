@@ -1,9 +1,9 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2009 Marc Worrell
+%% @copyright 2009-2013 Marc Worrell
 %%
 %% Based on code copyright (c) 2008-2009 Rusty Klophaus
 
-%% Copyright 2009 Marc Worrell
+%% Copyright 2009-2013 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -28,15 +28,17 @@ render_action(TriggerId, TargetId, Args, Context) ->
     Postback  = proplists:get_value(postback, Args),
     Delegate  = proplists:get_value(delegate, Args),
     Actions   = proplists:get_all_values(action, Args),
+    QArgs     = proplists:get_all_values(qarg, Args),
 
-    {PostbackMsgJS, PickledPostback} = z_render:make_postback(Postback, EventType, Trigger, TargetId, Delegate, Context),
+    {PostbackMsgJS, PickledPostback} = z_render:make_postback(Postback, EventType, Trigger, TargetId, 
+                                                              Delegate, QArgs, Context),
     {ActionsJS,Context1} = z_render:render_actions(Trigger, TargetId, Actions, Context),
     
     Script = if
                 EventType == enterkey orelse EventType == "enterkey" ->
                     [
                         z_render:render_css_selector(z_render:css_selector(Trigger, Args)), 
-                        <<"'.bind('keypress', ">>,
+                        <<"'.on('keypress', ">>,
                         <<"function(event) { if (z_is_enter_key(event)) { ">>, PostbackMsgJS, ActionsJS, 
                         case Propagate of 
                             true -> $;; 
@@ -84,7 +86,7 @@ render_action(TriggerId, TargetId, Args, Context) ->
                 true ->
                     [
                         z_render:render_css_selector(z_render:css_selector(Trigger, Args)),
-                        <<".bind('">>, z_convert:to_list(EventType), <<"', ">>,
+                        <<".on('">>, z_convert:to_list(EventType), <<"', ">>,
                         <<"function(event) { ">>, PostbackMsgJS, ActionsJS, 
                         case Propagate of 
                             true -> <<>>; 

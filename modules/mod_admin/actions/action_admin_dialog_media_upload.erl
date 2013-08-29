@@ -8,9 +8,9 @@
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%     http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,8 +37,8 @@ render_action(TriggerId, TargetId, Args, Context) ->
     Stay = proplists:get_value(stay, Args, false),
     Callback = proplists:get_value(callback, Args),
     Postback = {media_upload_dialog, Title, Id, SubjectId, Predicate, Stay, Callback, Actions},
-	{PostbackMsgJS, _PickledPostback} = z_render:make_postback(Postback, click, TriggerId, TargetId, ?MODULE, Context),
-	{PostbackMsgJS, Context}.
+        {PostbackMsgJS, _PickledPostback} = z_render:make_postback(Postback, click, TriggerId, TargetId, ?MODULE, Context),
+        {PostbackMsgJS, Context}.
 
 
 %% @doc Fill the dialog with the new page form. The form will be posted back to this module.
@@ -54,40 +54,36 @@ event(#postback{message={media_upload_dialog, Title, Id, SubjectId, Predicate, S
         {predicate, Predicate},
         {stay, Stay}
     ],
-    DTitle = case Id of undefined -> "Add a new media file"; _ -> "Replace current medium." end,
+    DTitle = case Id of undefined -> ?__("Add a new media file", Context); _ -> ?__("Replace current medium", Context) end,
     z_render:dialog(DTitle, "_action_dialog_media_upload.tpl", Vars, Context);
 
 
 event(#submit{message={media_upload, EventProps}}, Context) ->
     File = z_context:get_q_validated("upload_file", Context),
-    ContextUpload = case File of
-                        #upload{filename=OriginalFilename, tmpfile=TmpFile} ->
-                            Props = case proplists:get_value(id, EventProps) of
-                                        undefined ->
-                                            Lang = z_context:language(Context),
-                                            Title = z_context:get_q("new_media_title", Context),
-                                            NewTitle = case z_utils:is_empty(Title) of
-                                                           true -> OriginalFilename;
-                                                           false -> Title
-                                                       end,
-                                            [{title, {trans, [{Lang,NewTitle}]}},
-                                             {language, [Lang]},
-                                             {original_filename, OriginalFilename}];
-                                        _ ->
-                                            [{original_filename, OriginalFilename}]
-                                    end,
-                            handle_media_upload(EventProps, Context,
-                                                %% insert fun
-                                                fun(Ctx) -> m_media:insert_file(TmpFile, Props, Ctx) end,
-                                                %% replace fun
-                                                fun(Id, Ctx) -> m_media:replace_file(TmpFile, Id, Props, Ctx) end);
+    case File of
+        #upload{filename=OriginalFilename, tmpfile=TmpFile} ->
+            Props = case proplists:get_value(id, EventProps) of
+                        undefined ->
+                            Lang = z_context:language(Context),
+                            Title = z_context:get_q("new_media_title", Context),
+                            NewTitle = case z_utils:is_empty(Title) of
+                                           true -> OriginalFilename;
+                                           false -> Title
+                                       end,
+                            [{title, {trans, [{Lang,NewTitle}]}},
+                             {language, [Lang]},
+                             {original_filename, OriginalFilename}];
                         _ ->
-                            z_render:growl("No file specified.", Context)
+                            [{original_filename, OriginalFilename}]
                     end,
-
-    %% Close the dialog and optionally perform the post upload actions
-    z_render:wire({dialog_close, []}, ContextUpload);
-
+            handle_media_upload(EventProps, Context,
+                                %% insert fun
+                                fun(Ctx) -> m_media:insert_file(TmpFile, Props, Ctx) end,
+                                %% replace fun
+                                fun(Id, Ctx) -> m_media:replace_file(TmpFile, Id, Props, Ctx) end);
+        _ ->
+            z_render:growl("No file specified.", Context)
+    end;
 
 event(#submit{message={media_url, EventProps}}, Context) ->
     Url = z_context:get_q("url", Context),
@@ -97,14 +93,11 @@ event(#submit{message={media_url, EventProps}}, Context) ->
                 _ ->
                     []
             end,
-    ContextUpload = handle_media_upload(EventProps, Context,
-                                        %% insert fun
-                                        fun(Ctx) -> m_media:insert_url(Url, Props, Ctx) end,
-                                        %% replace fun
-                                        fun(Id, Ctx) -> m_media:replace_url(Url, Id, Props, Ctx) end),
-
-    %% Close the dialog and optionally perform the post upload actions
-    z_render:wire({dialog_close, []}, ContextUpload).
+    handle_media_upload(EventProps, Context,
+                        %% insert fun
+                        fun(Ctx) -> m_media:insert_url(Url, Props, Ctx) end,
+                        %% replace fun
+                        fun(Id, Ctx) -> m_media:replace_url(Url, Id, Props, Ctx) end).
 
 
 
@@ -124,43 +117,51 @@ handle_media_upload(EventProps, Context, InsertFun, ReplaceFun) ->
                 {ok, MediaId} ->
                     {_, ContextCb} = mod_admin:do_link(z_convert:to_integer(SubjectId), Predicate, MediaId, Callback, Context),
 
-                    ContextRedirect = 
+                    ContextRedirect =
                             case SubjectId of
-                              undefined -> 
+                              undefined ->
                                   case Stay of
                                       true -> ContextCb;
                                       false -> z_render:wire({redirect, [{dispatch, "admin_edit_rsc"}, {id, MediaId}]}, ContextCb)
                                   end;
-                              _ -> 
+                              _ ->
                                   ContextCb
                             end,
                     Actions2 = [add_arg_to_action({id, MediaId}, A) || A <- Actions],
                     z_render:wire([
-                            {growl, [{text, "Uploaded the file."}]},
-                            {dialog_close, []} 
+                            {growl, [{text, ?__("Media item created.", ContextRedirect)}]},
+                            {dialog_close, []}
                             | Actions2], ContextRedirect);
-                {error, _Error} ->
-                    z_render:growl_error("Error uploading the file.", Context)
+                {error, R} ->
+                    z_render:growl_error(error_message(R, Context), Context)
             end;
-      
+
         %% Replace attached medium with the uploaded file (skip any edge requests)
-        N when is_integer(N) -> 
+        N when is_integer(N) ->
             case ReplaceFun(Id, Context) of
                 {ok, _} ->
-                    Context1 = z_render:wire(Actions, Context),
-                            z_render:growl("Uploaded the file.", Context1);
-                {error, eacces} ->
-                            z_render:growl_error("You don't have permission to change this page.", Context);
-                {error, _} ->
-                    z_render:growl_error("Error uploading the file.", Context)
+                    z_render:wire([
+                            {growl, [{text, ?__("Media item created.", Context)}]},
+                            {dialog_close, []}
+                            | Actions], Context);
+                {error, R} ->
+                    z_render:growl_error(error_message(R, Context), Context)
             end
     end.
 
+%% @doc Return a sane upload error message
+error_message(eacces, Context) ->
+    ?__("You don't have permission to change this media item.", Context);
+error_message(file_not_allowed, Context) ->
+    ?__("You don't have the proper permissions to upload this type of file.", Context);
+error_message(download_failed, Context) ->
+    ?__("Failed to download the file.", Context);
+error_message(_R, Context) ->
+    ?zWarning(io_lib:format("Unknown upload error: ~p", [_R]), Context),
+    ?__("Error uploading the file.", Context).
 
 % Add an extra argument to a postback / submit action.
 add_arg_to_action(Arg, {postback, [{postback, {Action, ArgList}} | Rest]}) ->
     {postback, [{postback, {Action, [Arg | ArgList]}} | Rest]};
 add_arg_to_action(_A, B) ->
     B.
-
-

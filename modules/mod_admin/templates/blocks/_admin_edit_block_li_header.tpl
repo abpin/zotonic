@@ -10,8 +10,8 @@
 <fieldset class="form-vertical">
     <div class="control-group">
     {% if is_editable %}
-        <input type="text" id="block-{{name}}-header{{ lang_code_with_dollar }}" name="block-{{name}}-header{{ lang_code_with_dollar }}" 
-               class="span8" value="{{ blk.header[lang_code] }}"
+        <input type="text" id="block-{{name}}-header{{ lang_code_for_id }}" name="block-{{name}}-header{{ lang_code_with_dollar }}" 
+               class="input-block-level" value="{{ blk.header[lang_code] }}"
                placeholder="{_ Header _} ({{ lang_code }})" />
     {% else %}
         <h3>{{ blk.header[lang_code]  }}</h3>

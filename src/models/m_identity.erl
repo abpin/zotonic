@@ -1,10 +1,10 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2009 Marc Worrell
+%% @copyright 2009-2013 Marc Worrell
 %% Date: 2009-04-25
 %%
 %% @doc Manage identities of users.  An identity can be an username/password, openid, oauth credentials etc.
 
-%% Copyright 2009 Marc Worrell
+%% Copyright 2009-2013 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -37,8 +37,13 @@
     check_username_pw/3,
     hash/1,
     hash_is_equal/2,
+    get/2,
     get_rsc/2,
+    get_rsc_by_type/3,
     get_rsc/3,
+
+    is_valid_key/3,
+    normalize_key/2,
 
 	lookup_by_username/2,
 	lookup_by_verify_key/2,
@@ -46,7 +51,9 @@
     lookup_by_type_and_key_multi/3,
 
 	set_by_type/4,
+	set_by_type/5,
 	delete_by_type/3,
+    delete_by_type_and_key/4,
 	
     insert/4,
     insert/5,
@@ -72,13 +79,21 @@ m_find_value(is_user, #m{value=RscId}, Context) ->
     is_user(RscId, Context);
 m_find_value(username, #m{value=RscId}, Context) ->
     get_username(RscId, Context);
-m_find_value(all, #m{value=RscId}, Context) ->
-    get_rsc(RscId, Context);
+m_find_value(all, #m{value=RscId} = M, _Context) ->
+    M#m{value={all, RscId}};
+m_find_value(Type, #m{value={all,RscId}}, Context) ->
+    get_rsc_by_type(RscId, Type, Context);
+m_find_value(get, #m{value=undefined} = M, _Context) ->
+    M#m{value=get};
+m_find_value(IdnId, #m{value=get}, Context) ->
+    get(IdnId, Context);
 m_find_value(Type, #m{value=RscId}, Context) ->
     get_rsc(RscId, Type, Context).
 
 %% @doc Transform a m_config value to a list, used for template loops
 %% @spec m_to_list(Source, Context) -> List
+m_to_list(#m{value={all, RscId}}, Context) ->
+    get_rsc(RscId, Context);
 m_to_list(#m{}, _Context) ->
     [].
 
@@ -190,7 +205,8 @@ set_username_pw(Id, Username, Password, Context) ->
     end.
 
 
-%% @doc Return the rsc_id with the given username/password.  When succesful then updates the 'visited' timestamp of the entry.
+%% @doc Return the rsc_id with the given username/password.  
+%%      If succesful then updates the 'visited' timestamp of the entry.
 %% @spec check_username_pw(Username, Password, Context) -> {ok, Id} | {error, Reason}
 check_username_pw("admin", [], _Context) ->
     {error, password};
@@ -204,27 +220,61 @@ check_username_pw("admin", Password, Context) ->
 	    {error, password}
     end;
 check_username_pw(Username, Password, Context) ->
-    Username1 = z_string:to_lower(Username),
-    Row = z_db:q_row("select id, rsc_id, propb from identity where type = 'username_pw' and key = $1", [Username1], Context),
+    Username1 = z_string:trim(z_string:to_lower(Username)),
+    Row = z_db:q_row("select rsc_id, propb from identity where type = 'username_pw' and key = $1", [Username1], Context),
     case Row of
         undefined ->
-            {error, nouser};
-        {Id, RscId, Hash} ->
-            case hash_is_equal(Password, Hash) of
-                true -> 
-                    z_db:q("update identity set visited = now() where id = $1", [Id], Context),
-                    {ok, RscId};
-                false ->
-                    {error, password}
+            % If the Username looks like an e-mail address, try by Email & Password
+            case z_email_utils:is_email(Username) of
+                true -> check_email_pw(Username, Password, Context);
+                false -> {error, nouser}
+            end;
+        {RscId, Hash} ->
+            check_hash(RscId, Username, Password, Hash, Context)
+    end.
+
+%% @doc Check is the password belongs to an user with the given e-mail address.
+%%      Multiple users can have the same e-mail address, so multiple checks are needed.
+%%      If succesful then updates the 'visited' timestamp of the entry.
+%% @spec check_email_pw(Email, Password, Context) -> {ok, Id} | {error, Reason}
+check_email_pw(Email, Password, Context) ->
+    EmailLower = z_string:trim(z_string:to_lower(Email)),
+    case lookup_by_type_and_key_multi(email, EmailLower, Context) of
+        [] -> {error, nouser};
+        Users -> check_email_pw_1(Users, Email, Password, Context)
+    end.
+
+check_email_pw_1([], _Email, _Password, _Context) ->
+    {error, password};
+check_email_pw_1([Idn|Rest], Email, Password, Context) ->
+    UserId = proplists:get_value(rsc_id, Idn),
+    Row = z_db:q_row("select rsc_id, key, propb from identity where type = 'username_pw' and rsc_id = $1", 
+                     [UserId], Context),
+    case Row of
+        undefined -> 
+            check_email_pw_1(Rest, Email, Password, Context);
+        {RscId, Username, Hash} ->
+            case check_hash(RscId, Username, Password, Hash, Context) of
+                {ok, Id} -> {ok, Id};
+                {error, password} ->
+                    check_email_pw_1(Rest, Email, Password, Context)
             end
     end.
 
 
+%% @doc Fetch a specific identity entry.
+get(IdnId, Context) ->
+    z_db:assoc_row("select * from identity where id = $1", [IdnId], Context).
 
 %% @doc Fetch all credentials belonging to the user "id"
 %% @spec get_rsc(integer(), context()) -> list()
 get_rsc(Id, Context) ->
     z_db:assoc("select * from identity where rsc_id = $1", [Id], Context).
+
+%% @doc Fetch all credentials belonging to the user "id" and of a certain type
+get_rsc_by_type(Id, Type, Context) ->
+    z_db:assoc("select * from identity where rsc_id = $1 and type = $2 order by is_verified desc, key asc",
+               [Id, Type], Context).
 
 get_rsc(Id, Type, Context) ->
     z_db:assoc_row("select * from identity where rsc_id = $1 and type = $2", [Id, Type], Context).
@@ -250,8 +300,52 @@ hash_is_equal(_, _) ->
 insert(RscId, Type, Key, Context) ->
     insert(RscId, Type, Key, [], Context).
 insert(RscId, Type, Key, Props, Context) ->
-    Props1 = [{rsc_id, RscId}, {type, Type}, {key, Key} | Props],
-    z_db:insert(identity, Props1, Context).
+    KeyNorm = normalize_key(Type, Key),
+    case is_valid_key(Type, KeyNorm, Context) of
+        true -> insert_1(RscId, Type, KeyNorm, Props, Context);
+        false -> {error, invalid_key}
+    end.
+
+insert_1(RscId, Type, Key, Props, Context) ->
+    case z_db:q1("select id 
+                  from identity 
+                  where rsc_id = $1
+                    and type = $2
+                    and key = $3",
+                [RscId, Type, Key],
+                Context)
+    of
+        undefined -> 
+            Props1 = [{rsc_id, RscId}, {type, Type}, {key, Key} | Props],
+            z_db:insert(identity, validate_is_unique(Props1), Context);
+        IdnId ->
+            case proplists:get_value(is_verified, Props, false) of
+                true -> set_verified_trans(RscId, Type, Key, Context);
+                false -> nop
+            end,
+            {ok, IdnId}
+    end.
+
+% The is_unique flag is 'null' if the entry is not unique.
+% This enables using an 'unique' constraint.
+validate_is_unique(Props) ->
+    case proplists:get_value(is_unique, Props) of
+        false ->
+            [{is_unique, undefined} | proplists:delete(is_unique, Props)];
+        _ ->
+            Props
+    end.
+
+is_valid_key(email, Key, _Context) ->
+    z_email_utils:is_email(Key);
+is_valid_key(_Type, _Key, _Context) ->
+    true.
+
+normalize_key(email, Key) ->
+    z_convert:to_binary(z_string:trim(z_string:to_lower(Key)));
+normalize_key(_Type, Key) ->
+    Key.
+
 
 %% @doc Create an unique identity record.
 insert_unique(RscId, Type, Key, Context) ->
@@ -259,12 +353,46 @@ insert_unique(RscId, Type, Key, Context) ->
 insert_unique(RscId, Type, Key, Props, Context) ->
     insert(RscId, Type, Key, [{is_unique, true}|Props], Context).
 
-%% @doc Set the verified flag on a record.
+
+%% @doc Set the visited timestamp for the given user.
+%% @todo Make this a log - so that we can see the last visits and check if this is from a new browser/ip address.
+set_visited(UserId, Context) ->
+    z_db:q("update identity set visited = now() where rsc_id = $1 and type = 'username_pw'", [UserId], Context).
+
+
+%% @doc Set the verified flag on a record by identity id.
 set_verified(Id, Context) ->
-    z_db:q("update identity set is_verified = true, verify_key = null where id = $1", [Id], Context).
-set_verified(RscId, Type, Key, Context) ->
-    z_db:q("update identity set is_verified = true, verify_key = null where rsc_id = $1 and type = $2 and key = $3", [RscId, Type, Key], Context).
-    
+    z_db:q("update identity set is_verified = true, verify_key = null where id = $1", 
+           [Id], 
+           Context).
+
+%% @doc Set the verified flag on a record by rescource id, identity type and value (eg an user's email address).
+set_verified(RscId, Type, Key, Context) 
+    when is_integer(RscId), 
+         Type =/= undefined, 
+         Key =/= undefined, Key =/= <<>>, Key =/= [] ->
+    z_db:transaction(fun(Ctx) -> set_verified_trans(RscId, Type, Key, Ctx) end, Context);
+set_verified(_RscId, _Type, _Key, _Context) ->
+    {error, badarg}.
+
+set_verified_trans(RscId, Type, Key, Context) ->
+    case z_db:q("update identity 
+                 set is_verified = true, 
+                     verify_key = null 
+                 where rsc_id = $1 and type = $2 and key = $3", 
+                [RscId, Type, Key], 
+                Context)
+    of
+        0 ->
+            1 = z_db:q("insert into identity (rsc_id, type, key, is_verified) 
+                        values ($1,$2,$3,true)", 
+                       [RscId, Type, Key], 
+                       Context),
+            ok;
+        N when N > 0 -> 
+            ok
+    end.
+
 %% @doc Check if there is a verified identity for the user, beyond the username_pw
 is_verified(RscId, Context) ->
     case z_db:q1("select id from identity where rsc_id = $1 and is_verified = true and type <> 'username_pw'", 
@@ -274,10 +402,12 @@ is_verified(RscId, Context) ->
     end.
 
 set_by_type(RscId, Type, Key, Context) ->
+    set_by_type(RscId, Type, Key, [], Context).
+set_by_type(RscId, Type, Key, Props, Context) ->
 	F = fun(Ctx) -> 
-		case z_db:q("update identity set key = $3 where rsc_id = $1 and type = $2", [RscId, Type, Key], Ctx) of
-			1 -> ok;
-			0 -> z_db:q("insert into identity (rsc_id, type, key) values ($1,$2,$3)", [RscId, Type, Key], Ctx)
+		case z_db:q("update identity set key = $3, propb = $4 where rsc_id = $1 and type = $2", [RscId, Type, Key, Props], Ctx) of
+			0 -> z_db:q("insert into identity (rsc_id, type, key, propb) values ($1,$2,$3,$4)", [RscId, Type, Key, Props], Ctx);
+            N when N > 0 -> ok
 		end
 	end,
 	z_db:transaction(F, Context).
@@ -287,6 +417,9 @@ delete(IdnId, Context) ->
 
 delete_by_type(RscId, Type, Context) ->
 	z_db:q("delete from identity where rsc_id = $1 and type = $2", [RscId, Type], Context).
+
+delete_by_type_and_key(RscId, Type, Key, Context) ->
+    z_db:q("delete from identity where rsc_id = $1 and type = $2 and key = $3", [RscId, Type, Key], Context).
 
 
 lookup_by_username(Key, Context) ->
@@ -311,3 +444,23 @@ set_verify_key(Id, Context) ->
             set_verify_key(Id, Context)
     end.
 
+
+check_hash(RscId, Username, Password, Hash, Context) ->
+    N = #identity_password_match{rsc_id=RscId, password=Password, hash=Hash},
+    case z_notifier:first(N, Context) of
+        {ok, rehash} ->
+            %% OK but module says it needs rehashing; do that using
+            %% the current hashing mechanism
+            ok = set_username_pw(RscId, Username, Password, z_acl:sudo(Context)),
+            check_hash_ok(RscId, Context);
+        ok ->
+            check_hash_ok(RscId, Context);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+check_hash_ok(RscId, Context) ->
+    set_visited(RscId, Context),
+    {ok, RscId}.
+    

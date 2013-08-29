@@ -75,6 +75,21 @@ m_find_value(s, #m{value=undefined}, _Context) ->
         end
     end;
 
+%% m.edge.id[subject_id].predicatename[object_id] returns the
+%% corresponding edge id or undefined.
+m_find_value(id, #m{value=undefined}, _Context) ->
+    fun(SubjectId, _IdContext) ->
+            fun(Pred, _PredContext) ->
+                    fun(ObjectId, Context) ->
+                            z_depcache:memo(
+                              fun() ->
+                                      get_id(SubjectId, Pred, ObjectId, Context)
+                              end,
+                              {get_id, SubjectId, Pred, ObjectId}, ?DAY, [SubjectId], Context)
+                    end
+            end
+    end;
+
 m_find_value(_Key, #m{}, _Context) ->
     undefined.
 
@@ -106,7 +121,7 @@ get_id(SubjectId, PredId, ObjectId, Context) when is_integer(PredId) ->
     z_db:q1("select id from edge where subject_id = $1 and object_id = $3 and predicate_id = $2", [SubjectId, PredId, ObjectId], Context);
 get_id(SubjectId, Pred, ObjectId, Context) ->
     PredId = m_predicate:name_to_id_check(Pred, Context),
-    z_db:q1("select id from edge where subject_id = $1 and object_id = $3 and predicate_id = $2", [SubjectId, PredId, ObjectId], Context).
+    get_id(SubjectId, PredId, ObjectId, Context).
 
 %% @doc Return the full description of all edges from a subject, grouped by predicate
 get_edges(SubjectId, Context) ->
@@ -125,17 +140,25 @@ get_edges(SubjectId, Context) ->
     end.
 
 %% Insert a new edge
-insert(SubjectId, Pred, ObjectId, Context) ->
-    insert(SubjectId, Pred, ObjectId, [], Context).
+insert(Subject, Pred, Object, Context) ->
+    insert(Subject, Pred, Object, [], Context).
 
-insert(SubjectId, PredId, ObjectId, Opts, Context) when is_integer(PredId) ->
+insert(SubjectId, PredId, ObjectId, Opts, Context) 
+  when is_integer(SubjectId), is_integer(PredId), is_integer(ObjectId) ->
     case m_predicate:is_predicate(PredId, Context) of
         true -> insert1(SubjectId, PredId, ObjectId,  Opts, Context);
         false -> throw({error, {unknown_predicate, PredId}})
     end;
-insert(SubjectId, Pred, ObjectId, Opts, Context) ->
+insert(SubjectId, Pred, ObjectId, Opts, Context)
+  when is_integer(SubjectId), is_integer(ObjectId) ->
     PredId = m_predicate:name_to_id_check(Pred, Context),
-    insert1(SubjectId, PredId, ObjectId, Opts, Context).
+    insert1(SubjectId, PredId, ObjectId, Opts, Context);
+insert(SubjectId, Pred, Object, Opts, Context) when is_integer(SubjectId) ->
+    ObjectId = m_rsc:name_to_id_check(Object, Context),
+    insert(SubjectId, Pred, ObjectId, Opts, Context);
+insert(Subject, Pred, Object, Opts, Context) ->
+    SubjectId = m_rsc:name_to_id_check(Subject, Context),
+    insert(SubjectId, Pred, Object, Opts, Context).
 
     insert1(SubjectId, PredId, ObjectId, Opts, Context) ->
         case z_db:q1("select id from edge where subject_id = $1 and object_id = $2 and predicate_id = $3", [SubjectId, ObjectId, PredId], Context) of
