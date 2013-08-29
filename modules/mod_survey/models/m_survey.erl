@@ -30,6 +30,7 @@
     m_value/2,
 
     is_allowed_results_download/2,
+    get_handlers/1,
     insert_survey_submission/3,
     insert_survey_submission/5,
     survey_stats/2,
@@ -52,10 +53,14 @@ m_find_value(all_results, #m{value=undefined} = M, _Context) ->
     M#m{value=all_results};
 m_find_value(captions, #m{value=undefined} = M, _Context) ->
     M#m{value=captions};
+m_find_value(totals, #m{value=undefined} = M, _Context) ->
+    M#m{value=totals};
 m_find_value(did_survey, #m{value=undefined} = M, _Context) ->
     M#m{value=did_survey};
 m_find_value(is_allowed_results_download, #m{value=undefined} = M, _Context) ->
     M#m{value=is_allowed_results_download};
+m_find_value(handlers, #m{value=undefined}, Context) ->
+    get_handlers(Context);
 
 m_find_value(Id, #m{value=results}, Context) ->
     prepare_results(Id, Context);
@@ -65,6 +70,8 @@ m_find_value(Id, #m{value=all_results}, Context) ->
     survey_results(Id, Context);
 m_find_value(Id, #m{value=captions}, Context) ->
     survey_captions(Id, Context);
+m_find_value(Id, #m{value=totals}, Context) ->
+    survey_totals(Id, Context);
 m_find_value(Id, #m{value=did_survey}, Context) ->
     did_survey(Id, Context);
 m_find_value(Id, #m{value=is_allowed_results_download}, Context) ->
@@ -85,6 +92,11 @@ m_value(#m{value=undefined}, _Context) ->
 is_allowed_results_download(Id, Context) ->
     z_acl:rsc_editable(Id, Context)
     orelse z_notifier:first(#survey_is_allowed_results_download{id=Id}, Context) == true.
+
+%% @doc Return the list of known survey handlers
+-spec get_handlers(#context{}) -> list({atom(), binary()}).
+get_handlers(Context) ->
+    z_notifier:foldr(#survey_get_handlers{}, [], Context).
 
 
 %% @doc Check if the current user/browser did the survey
@@ -320,16 +332,21 @@ user_answer_row({user, User, Persistent}, Created, Answers, Questions, Context) 
          undefined -> <<>>;
          _ -> erlydtl_dateformat:format(Created, "Y-m-d H:i", Context)
      end
-     | answer_row(Answers, Questions, Context)
+     | answer_row(Answers, Questions, Created, Context)
     ].
 
 %% @doc private
-answer_row(Answers, Questions, Context) ->
-    %% Convert answers to proper format if old format is discovered
-    Answers1 = [case A of
-                    {X, {X, _}} -> A;
-                    {_, {X, Y}} -> {X, {X, Y}}
-                end || A <- Answers],
+answer_row(Answers, Questions, Created, Context) ->
+    Answers1 = case Created =:= undefined orelse Created >= {{2012,12,1},{0,0,0}} of
+                   true ->
+                       Answers;
+                   false ->
+                       %% Convert answers to proper format if old format is discovered and survey was filled before 2012-12-01
+                       [case A of
+                            {X, {X, _}} -> A;
+                            {_, {X, Y}} -> {X, {X, Y}}
+                        end || A <- Answers]
+               end,
     lists:flatten([
                    answer_row_question(proplists:get_all_values(QId, Answers1), 
                                        Question,
@@ -390,6 +407,42 @@ survey_captions(Id, Context) ->
                 {<<"created">>, ?__("Created", Context)} |
                 [ {proplists:get_value(name, Block), proplists:get_value(prompt, Block)} || Block <- Blocks ]
             ];
+        _ ->
+            []
+    end.
+
+
+%% @private
+survey_totals(Id, Context) ->
+    Stats = survey_stats(Id, Context),
+    lager:warning("Stats: ~p", [Stats]),
+    
+    case m_rsc:p(Id, blocks, Context) of
+        Blocks when is_list(Blocks) ->
+            lager:warning("Blocks: ~p", [Blocks]),
+
+            All = lists:map(fun(Block) ->
+                                    Name = proplists:get_value(name, Block),
+                                    Type = proplists:get_value(type, Block),
+                                    M = mod_survey:module_name(Type),
+                                    Value = case proplists:get_value(prep_totals, erlang:get_module_info(M, exports)) of
+                                                3 ->
+                                                    lager:warning("Name: ~p", [Name]),
+                                                    Vals = proplists:get_value(Name, Stats),
+                                                    M:prep_totals(Block, Vals, Context);
+                                                undefined ->
+                                                    undefined
+                                            end,
+                                    {Name, Value}
+                            end,
+                            Blocks),
+            AllEmpty = lists:foldl(fun(Total, Acc) -> z_utils:is_empty(Total) and Acc end, true, All),
+            case AllEmpty of
+                true ->
+                    undefined;
+                false ->
+                    All
+            end;
         _ ->
             []
     end.

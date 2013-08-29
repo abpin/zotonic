@@ -1,8 +1,8 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2011 Marc Worrell
+%% @copyright 2011-2013 Marc Worrell
 %% @doc Notifications used in Zotonic core
 
-%% Copyright 2011 Marc Worrell
+%% Copyright 2011-2013 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,12 +16,19 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+%% @doc Try to find the site for the request z_notifier:first/2
+%%		Called when the request Host doesn't match any active site.
+%%		Result:   {ok, #dispatch_redirect{}}
+%%				| undefined.
+-record(dispatch_host, {host, path=[], method='GET', protocol=http}).
+
 %% @doc Final try for dispatch, try to match the request. Called with z_notifier:first/2
+%%		Called when the site is known, but no match is found for the path
 %%      Result:   {ok, RscId::integer()} 
 %%              | {ok, #dispatch_match{}} 
 %%              | {ok, #dispatch_redirect{}}
 %%              | undefined.
--record(dispatch, {host, path=[], method='GET', protocol=http}).
+-record(dispatch, {host, path="", method='GET', protocol=http}).
     
     -record(dispatch_redirect, {location, is_permanent=false}).
     -record(dispatch_match, {dispatch_name, mod, mod_opts=[], path_tokens=[], bindings=[], app_root="", string_path=""}).
@@ -56,6 +63,11 @@
 %% @doc Request to send a verification to the user. Return ok or an error (first)
 %% Identity may be undefined, or is a identity used for the verification.
 -record(identity_verification, {user_id, identity}).
+
+%% @doc Notification that an user's identity has been verified. (notify)
+-record(identity_verified, {user_id, type, key}).
+
+-record(identity_password_match, {rsc_id, password, hash}).
 
 
 %% @doc Handle a signup of an user, return the follow on page for after the signup. (first)
@@ -100,17 +112,23 @@
 %% @doc Set the language of the context to a user's prefered language (first)
 -record(set_user_language, {id}).
 
+%% @doc Make a generated URL absolute, optionally called after url_rewrite by z_dispatcher (first)
+-record(url_abs, {url, dispatch, dispatch_options}).
+
 %% @doc Rewrite an url after it has been generated using the z_dispatcher (foldl)
 -record(url_rewrite, {dispatch, args=[]}).
 
-%% @doc Rewrite an url before it will be dispatched using the z_dispatcher (foldl)
--record(dispatch_rewrite, {is_dir=false, path=""}).
+%% @doc Rewrite an url before it will be dispatched using the z_sites_dispatcher (foldl)
+-record(dispatch_rewrite, {is_dir=false, path="", host}).
 
 %% @doc Used in the admin to fetch the possible blocks for display (foldl)
 -record(admin_edit_blocks, {id}).
 
 %% Used for fetching the menu in the admin (foldl)
 % admin_menu
+
+%% @doc Fetch the menu id belonging to a certain resource (first)
+-record(menu_rsc, {id}).
 
 %% @doc An activity in Zotonic. When this is handled as a notification then return a list
 %% of patterns matching this activity.  These patterns are then used to find interested
@@ -129,7 +147,8 @@
                 vars=[], attachments=[], queue=false}).
 
 %% @doc Notification sent to a site when e-mail for that site is received
--record(email_received, {to, from, localpart, localtags, domain, reference, email, headers, decoded, raw}).
+-record(email_received, {to, from, localpart, localtags, domain, reference, email, 
+						 headers, is_bulk=false, is_auto=false, decoded, raw}).
 
 % E-mail received notification:
 % {z_convert:to_atom(Notification), received, UserId, ResourceId, Received}
@@ -279,10 +298,19 @@
 -record(user_is_enabled, {id}).
 
 
+%% @doc Request API logon
+-record(service_authorize, {service_module}).
+
 
 %% @doc Fetch the url of a resource's html representation (first)
 %% Returns {ok, Url} or undefined
 -record(page_url, {id, is_a}).
+
+
+%% @doc Handle custom named search queries in your function. Return
+%% 'undefined' when your module does not handle the search query;
+%% otherwise, return a #search_sql{} or #search_result{} record.
+-record(search_query, {search, offsetlimit}).
 
 
 %% @doc An edge has been inserted. (notify)
@@ -299,6 +327,11 @@
 
 %% @doc Notification that a site configuration's property is changed (notify)
 -record(m_config_update_prop, {module, key, prop, value}).
+
+%% @doc Notification that a medium file has been uploaded.
+%%      This is the moment to change properties, modify the file etc. 
+%%		The medium record properties are folded over all observers. (foldl)
+-record(media_upload_props, {id, mime, archive_file, options}).
 
 %% @doc Notification that a medium file has been changed (notify)
 %% The id is the resource id, medium contains the medium's property list.
@@ -341,8 +374,11 @@
 -record(media_stillimage, {id, props=[]}).
 
 
+%% @doc Fetch lisy of handlers. (foldr)
+-record(survey_get_handlers, {}).
+
 %% @doc A survey has been filled in and submitted. (first)
--record(survey_submit, {id, answers, missing, answers_raw}).
+-record(survey_submit, {id, handler, answers, missing, answers_raw}).
 
 %% @doc Check if the current user is allowed to download a survey. (first)
 -record(survey_is_allowed_results_download, {id}).
@@ -372,6 +408,58 @@
 %% @doc Push some information to the debug page in the user-agent. 
 % Will be displayed with io_lib:format("~p: ~p~n", [What, Arg]), be careful with escaping information!
 -record(debug, {what, arg=[]}).
+
+
+%% @doc mod_export - return the content type (like {ok, "text/csv"}) for the dispatch rule/id export.
+-record(export_resource_content_type, {
+		dispatch :: atom(),
+		id :: integer()
+	}).
+
+%% @doc mod_export - return the {ok, Filename} for the content disposition.
+-record(export_resource_filename, {
+		dispatch :: atom(),
+		id :: integer(),
+		content_type :: string()
+	}).
+
+%% @doc mod_export - Fetch the header for the export.
+%% The 'first' notification should return: {ok, binary()} | {ok, binary(), ContinuationState} | {error, Reason}.
+-record(export_resource_header, {
+		dispatch :: atom(),
+		id :: integer(),
+		content_type :: string()
+	}).
+
+%% @doc mod_export - fetch a row for the export, can return a list of rows, a binary, and optionally a continuation state.
+%% The 'first' notification should return: {ok, Values|binary()} | {ok, Values|binary(), ContinuationState} | {error, Reason}.
+%% Where Values is [ term() ], i.e. a list of opaque values, to be formatted with #export_resource_format.
+%% Return the empty list of values to signify the end of the data stream.
+-record(export_resource_data, {
+		dispatch :: atom(),
+		id :: integer(),
+		content_type :: string(),
+		state :: term()
+	}).
+
+%% @doc mod_export - Encode a single data element.
+%% The 'first' notification should return: {ok, binary()} | {ok, binary(), ContinuationState} | {error, Reason}.
+-record(export_resource_encode, {
+		dispatch :: atom(),
+		id :: integer(),
+		content_type :: string(),
+		data :: term(),
+		state :: term()
+	}).
+
+%% @doc mod_export - Fetch the footer for the export. Should cleanup the continuation state, if needed.
+%% The 'first' notification should return: {ok, binary()} | {error, Reason}.
+-record(export_resource_footer, {
+		dispatch :: atom(),
+		id :: integer(),
+		content_type :: string(),
+		state :: term()
+	}).
 
 
 % Simple mod_development notifications:

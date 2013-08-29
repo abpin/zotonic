@@ -16,14 +16,7 @@
 
         <div class="tab-content">
 	<div class="tab-pane active" id="{{ #main }}">
-	    {% for code, lang in languages %}
-            {% if lang.is_enabled %}
-                {% if code|member:r_lang or (not r_lang and z_language == code) %}
-            	    <input type="hidden" id="{{ #language.code }}" name="language" value="{{ code }}" /> 
-        	    {% endif %}
-            {% endif %}
-        {% endfor %}
-        
+
 	    {% all catinclude "_admin_edit_basics.tpl" id in_dialog is_editable=id.is_editable languages=languages %}
 			
 	    {% if id.is_a.meta %}
@@ -61,8 +54,9 @@
     </div>
     
     <div class="modal-footer">
+
 	{% button class="btn" action={dialog_close} text=_"Cancel" tag="a" %}
-	{% button class="btn" text=_"Visit full editpage" action={redirect dispatch="admin_edit_rsc" id=id} tag="a" %}
+	{% button class="btn" text=_"Visit full edit page" action={redirect dispatch=q.edit_dispatch|default:`admin_edit_rsc` id=id} tag="a" %}
 	{% button class="btn btn-primary" type="submit" text=_"Save" %}
     </div>
 </form>

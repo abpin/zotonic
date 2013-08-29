@@ -26,7 +26,7 @@
          ensure_id/1
         ]).
 
--include_lib("html_controller.hrl").
+-include_lib("controller_html_helper.hrl").
 
 %% @todo Change this into "visible" and add a view instead of edit template.
 is_authorized(ReqData, Context) ->
@@ -44,10 +44,11 @@ resource_exists(ReqData, Context) ->
 
 html(Context) ->
     Id = z_context:get(id, Context),
-    Blocks = z_notifier:foldl(#admin_edit_blocks{id=Id}, [], Context),
+    Blocks = z_notifier:foldr(#admin_edit_blocks{id=Id}, [], Context),
     Vars = [
             {id, Id},
             {blocks, lists:sort(Blocks)}
+            | z_context:get_all(Context) 
            ],
     Html = z_template:render({cat, "admin_edit.tpl"}, Vars, Context),
     z_context:output(Html, Context).

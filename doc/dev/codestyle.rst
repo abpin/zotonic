@@ -22,15 +22,34 @@ of the Erlang world.
 Indenting templates
 -------------------
 
+Provided with the Zotonic distribution is a Zotonic template mode,
+``zotonic-tpl-mode``, which supports the Zotonic flavor of ErlyDtl.
+It is located in the :file:`priv/emacs/zotonic-tpl-mode.el` file, and
+may be installed in emacs by adding something like this to your `.emacs`
+file:
+
+.. code-block:: common-lisp
+
+   (add-to-list 'load-path ".../path/to/zotonic/priv/emacs")
+   (require 'zotonic-tpl-mode)
+   ;; optional, for associating .tpl files with zotonic-tpl-mode
+   (add-to-list 'auto-mode-alist '("\\.tpl$" . zotonic-tpl-mode))
+
+
+Hint when using the m.rsc model
+...............................
+
 A common style and shorthand techniques make templates from multiple
 authors more alike.  This makes them easier to maintain and share in a
 team or with the community.
 
 When the template sees that you request a property of an integer then
-it assumes that the integer is a m.rsc id. This makes templates more
+it assumes that the integer is a ``m.rsc`` `id`. This makes templates more
 readable.
 
-Example::
+Example:
+
+.. code-block:: django
 
   <li>
       <h3>{{ m.rsc[id].title }}</h3>
@@ -44,7 +63,9 @@ Example::
       {% endfor %}
   </li>
 
-Can be more effectively written as follows to improve readability::
+Can be more effectively written as follows to improve readability:
+
+.. code-block:: django
 
   <li>
       <h3>{{ id.title }}</h3>
@@ -71,62 +92,5 @@ of code shorter than 80 characters.
 Writing Commit Messages
 -----------------------
 
-The Zotonic commit convention are slightly based on `rebar's README
-<https://github.com/basho/rebar>`_.
-
-Structure your commit message like this::
-
-  prefix: One line summary (less than 50 characters)
-
-  Longer description, multiline text that is supposed to wrap at 72
-  characters.
-
-  Fixes #403
-
-* **Prefix**: Every commit message must start with one of the designated commit
-  prefixes:
-
- * ``mod_foobar:`` Changes that are related to a single module should
-   be prefixed with the module name.
- * ``core:`` For changes in the `src`, `include` or `deps` folder;
-   e.g. everything outside modules.
- * ``doc:`` For changes to the documentation, everything below doc/
- * ``scripts:`` for changes to the ``zotonic`` command and its helper scripts.
- * ``tests:`` for unit tests and the testsandbox.
- * ``skel`` for the skeleton sites.
- * ``zotonic_status`` for the default site.
-
-* The **summary** should be less than 50 characters, and tell what was
-  changed. Use the imperative present tense (fix, add, change). For
-  example: `Add 'foobar' filter`, `Fix bug in media upload service`.
-
-* The **description** should explain the intention and implementation
-  of your approach, in the present tense.
-
-* Optionally, when your commit **fixes** a bug on github, add `Fixes
-  #1545` on a separate line below the description.
-
-Notice the empty line preceding the longer description and the "Fixes" tag.
-
-
-Git best practices
-------------------
-
-* Please maintain commit atomicity by breaking up logical changes into
-  separate commits; e.g., do not commit unrelated fixes into a single
-  commit.
-
-* Make whitespace changes separately.
-
-* When updating from the Zotonic source, please use ``git pull
-  --rebase`` to prevent unnecessary merge commits.
-
-* Generally, try to `Mind your Git Manners <http://blog.8thlight.com/kevin-liddle/2012/09/27/mind-your-git-manners.html>`_.
-
-
-The CONTRIBUTORS file
----------------------
-
-When this is your first contribution to Zotonic, you are welcome to
-add your name and e-mail address to the CONTRIBUTORS file in the root
-of the project. Please keep the file alphabetically ordered.
+See the section in :ref:`dev-contributing` on how to format your
+commit messages.

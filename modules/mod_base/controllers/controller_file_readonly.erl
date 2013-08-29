@@ -40,7 +40,7 @@
     finish_request/2
 ]).
 
--include_lib("webmachine_controller.hrl").
+-include_lib("controller_webmachine_helper.hrl").
 -include_lib("zotonic.hrl").
 
 -record(cache, {path, fullpath, mime, last_modified, body}).
@@ -219,7 +219,7 @@ finish_request(ReqData, Context) ->
                                 last_modified=z_context:get(last_modified, Context),
                                 body=Body
                             },
-                            z_depcache:set(cache_key(Path), Cache, Context),
+                            z_depcache:set(cache_key(Path), Cache, 3600, [module_index], Context),
                             {ok, ReqData, Context};
                         _ ->
                             % No cache or no gzip'ed version (file system cache is fast enough for image serving)

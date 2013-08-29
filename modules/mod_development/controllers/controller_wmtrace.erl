@@ -28,8 +28,8 @@
         ]).
 
 
--include_lib("html_controller.hrl").
--include_lib("webmachine_logger.hrl").
+-include_lib("controller_html_helper.hrl").
+-include_lib("webzmachine/include/webmachine_logger.hrl").
 
 is_authorized(ReqData, Context) ->
     z_acl:wm_is_authorized(use, mod_development, ReqData, Context).

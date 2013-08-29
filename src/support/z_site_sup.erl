@@ -38,6 +38,13 @@ start_link(Host) ->
 %% @spec init(Host) -> SupervisorTree
 %% @doc Supervisor callback, returns the supervisor tree for a zotonic site
 init(Host) ->
+    HostStats = #stats_from{host=Host},
+    z_stats:new(#counter{name=requests}, HostStats#stats_from{system=webzmachine}),
+    z_stats:new(#counter{name=requests}, HostStats#stats_from{system=db}),
+    z_stats:new(#counter{name=out}, HostStats#stats_from{system=webzmachine}),
+    z_stats:new(#histogram{name=duration}, HostStats#stats_from{system=webzmachine}),
+    z_stats:new(#histogram{name=duration}, HostStats#stats_from{system=db}),
+
     % On (re)start we use the newest site config.
     SiteProps = z_sites_manager:get_site_config(Host),
 
@@ -54,8 +61,9 @@ init(Host) ->
                 permanent, 5000, worker, dynamic},
 
     % The installer needs the database pool, depcache and translation.
+    InstallerModule = proplists:get_value(installer, SiteProps, z_installer),
     Installer = {z_installer,
-                {z_installer, start_link, [SiteProps]},
+                {InstallerModule, start_link, [SiteProps]},
                 permanent, 1, worker, dynamic},
 
     % Continue with the normal per-site servers

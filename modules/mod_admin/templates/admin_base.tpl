@@ -10,15 +10,17 @@
 
         {% lib
                 "css/bootstrap-admin.css"
+                "css/bootstrap-admin-responsive.css"
+
                 "css/jquery-ui.datepicker.css"
                 "css/zp-menuedit.css"
                 "css/zotonic-admin.css"
-                "css/geomap.css"
                 "css/z.modal.css"
                 "css/jquery.loadmask.css"
         %}
 
-
+        {% all include "_html_head_admin.tpl" %}
+        
         {% include "_js_include_jquery.tpl" %}
         
         <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
@@ -33,23 +35,22 @@
 
 	{% wire name="adminwidget_toggle" action={adminwidget_toggle} %}
 
-        {% block navigation %}
+    {% block navigation %}
         {% include "_admin_menu.tpl" %}
-        {% endblock %}
+    {% endblock %}
 
+    <div class="container-fluid">
+        {% block content %}{% endblock %}
+    </div>
 
-        <div class="container">
-	    {% block content %}{% endblock %}
-	</div>
+    {% include "_admin_js_include.tpl" %}
+    {% block js_extra %}{% endblock %}
 
-	{% include "_admin_js_include.tpl" %}
-	{% block js_extra %}{% endblock %}
-	
-	{% stream %}
-	{% script %}
+    {% stream %}
+    {% script %}
 
-	{% block tinymce %}{% endblock %}
+    {% block tinymce %}{% endblock %}
         
-	{% block html_body_admin %}{% all include "_html_body_admin.tpl" %}{% endblock %}
+    {% block html_body_admin %}{% all include "_html_body_admin.tpl" %}{% endblock %}
 </body>
 </html>

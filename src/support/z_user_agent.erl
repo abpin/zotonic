@@ -29,12 +29,13 @@
     to_ua_class/1,
     filename_split_class/1,
     order_class/2,
-    classes/0
+    classes/0,
+    classes_fallback/1
 ]).
 
 -include_lib("zotonic.hrl").
 
--define(UA_COOKIE, "z_ua").
+-define(UA_COOKIE, ?SESSION_UA_CLASS_Q).
 -define(UA_COOKIE_MAX_AGE, 3600*24*3650).
 
 -type ua_template_class() :: ua_classifier:device_type() | generic.
@@ -66,7 +67,7 @@ set_class(#wm_reqdata{} = ReqData) ->
 
     %% @doc Try to find the user agent class from the ua classifier and the ua cookie.
     derive_class_from_reqdata(ReqData) ->   
-        {UAClass, UAProps} = get_ua_header(ReqData),
+        {UAClass, UAProps} = get_ua_req_data(ReqData),
         case get_cookie(ReqData) of
             {UAClassCookie, UAPropsCookie, IsUserDefined} ->
                 % Cookie with result of previous tests, merge with classifier props
@@ -110,19 +111,44 @@ set_class(#wm_reqdata{} = ReqData) ->
         end.
         
 
-    %% @doc Let the ua-classifier do its work on the user-agent request header.
-    get_ua_header(ReqData) -> 
-        case wrq:get_req_header_lc("user-agent", ReqData) of
-            undefined ->
-                {desktop, []};
-            UserAgent ->
-                case ua_classifier:classify(UserAgent) of
-                    {ok, Props} ->
-                        {ua_classifier:device_type(Props), Props};
-                    {error, _Reason} ->
-                        {desktop, []}
-                end
-        end.
+%% @doc Let the ua-classifier do its work on the user-agent request header or qs parameter.
+get_ua_req_data(ReqData) -> 
+    % Try to get the ua class from a qs. This is a workarond for a problem in
+    % Chrome and Safari which do not include the user-agent header in the 
+    % websocket request.
+    case get_ua_class_qs(ReqData) of
+        undefined -> 
+            case wrq:get_req_header_lc("user-agent", ReqData) of
+                undefined ->
+                    {desktop, []};
+                UserAgent ->
+                    ua_classify(UserAgent)
+            end;
+        Class ->
+            {Class, []}
+    end.
+ 
+get_ua_class_qs(ReqData) ->
+    to_ua_class(wrq:get_qs_value(?SESSION_UA_CLASS_Q, ReqData)).
+
+
+%% @doc classify the UserAgent string. 
+ua_classify(UserAgent) ->
+    case ua_classifier:classify(UserAgent) of
+        {ok, Props} ->
+            {ua_classifier:device_type(Props), Props};
+        {error, ua_classifier_nif_not_loaded} ->
+            %% Ignore ua_classifier_nif_not_loaded error. It is a configuration error 
+            %% and handled during startup.
+            %% Note: Do not call z_config:get(use_ua_classifier) here. Otherwise 
+            %% every request will call z_config gen_server making it a potential 
+            %% bottleneck. 
+            {desktop, []};    
+        {error, Reason} ->
+            error_logger:warning_msg("z_user_agent: ua_classifier returned error. [UA: ~p] [Reason: ~p]~n", [UserAgent, Reason]),
+            {desktop, []}
+    end.
+        
 
 to_ua_class("desktop") -> desktop;
 to_ua_class("tablet") -> tablet;
@@ -157,7 +183,7 @@ get_props(#wm_reqdata{} = ReqData) ->
 %% @doc The user selects an user agent by hand. Update cookie and session.
 -spec ua_select(ua_classifier:device_type() | automatic, #context{}) -> #context{}.
 ua_select(automatic, Context) ->
-    {UAClass, UAProps} = get_ua_header(z_context:get_reqdata(Context)),
+    {UAClass, UAProps} = get_ua_req_data(z_context:get_reqdata(Context)),
     CurrWidth = proplists:get_value(displayWidth, UAProps, 800),
     CurrHeight = proplists:get_value(displayHeight, UAProps, 600),
     CurrHasPointer = has_pointer_device(UAClass, UAProps),
@@ -166,7 +192,7 @@ ua_select(automatic, Context) ->
                CurrHasPointer,
                CurrWidth,
                CurrHeight,
-               Context);
+               Context);    
 ua_select(UAClass, Context) ->
     case get_class(Context) of
         UAClass ->
@@ -318,3 +344,9 @@ order_class(_, _) -> false.
 -spec classes() -> [ ua_classifier:device_type() ].
 classes() ->
     [ text, phone, tablet, desktop ].
+
+%% @doc Return all possible UA classes for a fallback from another class, including the given class.
+%%      The returned list is ordered from the specific to less specific.
+-spec classes_fallback(ua_classifier:device_type()) -> [ ua_classifier:device_type() ].
+classes_fallback(UAClass) ->
+    lists:dropwhile(fun(X) -> X =/= UAClass end, lists:reverse(classes())).

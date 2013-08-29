@@ -19,6 +19,10 @@
 		{% endfor %}
 	</fieldset>
 
+	<div class="alert alert-error z_invalid">
+		{_ Please fill in all the required fields. _}
+	</div>
+
 	<div class="form-actions">
 		{% if page_nr > 1 %}
 			<a id="{{ #back }}" href="#" class="btn">{_ Back _}</a>
@@ -31,13 +35,20 @@
 			<a id="{{ #cancel }}" href="#" class="btn">{_ Stop _}</a>
 			{% wire id=#cancel action={confirm text=_"Are you sure you want to stop?" ok=_"Stop" cancel=_"Continue" action={redirect id}} %}
 		{% endif %}
-		{% if not questions|survey_is_submit %}
+		{% with questions|last as last_q %}
+		{% if not questions|survey_is_submit and last_q.type /= "survey_stop" %}
 			<button type="submit" class="btn btn-primary">{% if page_nr == pages %}{_ Submit _}{% else %}{_ Next Question _}{% endif %}</button>
 		{% endif %}
+		{% endwith %}
 	</div>
 </form>
 
 {% javascript %}
     $('body').removeClass('survey-start').addClass('survey-question');
+
+    var pos = $('#{{ #q }}').position();
+    if (pos.top < $(window).scrollTop() + 100) {
+    	$(window).scrollTop(pos+100);
+	}
 {% endjavascript %}
 

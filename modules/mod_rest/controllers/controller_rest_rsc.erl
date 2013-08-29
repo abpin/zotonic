@@ -36,7 +36,7 @@
     get_bert/2
 ]).
 
--include_lib("webmachine_controller.hrl").
+-include_lib("controller_webmachine_helper.hrl").
 -include_lib("zotonic.hrl").
 
 init(DispatchArgs) -> {ok, DispatchArgs}.
@@ -131,6 +131,8 @@ do_get(Id, Data, Extension, Context) ->
                     "attachment; filename=", z_context:hostname(Context),
                     $-,   
                     integer_to_list(Id),
+                    $-, 
+                    m_rsc:p(Id, slug, Context),
                     $-, 
                     erlydtl_dateformat:format(Modified, "YmdHis", Context),
                     Extension

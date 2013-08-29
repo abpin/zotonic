@@ -62,7 +62,8 @@
     renumber/1,
     renumber_pivot_task/1,
     enumerate/1,
-    boundaries/2      
+    boundaries/2,
+    is_tree_dirty/1
 ]).
 
 
@@ -98,6 +99,8 @@ m_find_value(tree2, #m{value={cat, Id}}, Context) ->
     tree_depth(Id, 2, Context);
 m_find_value(path, #m{value={cat, Id}}, Context) ->
     get_path(Id, Context);
+m_find_value(is_a, #m{value={cat, Id}}, Context) ->
+    is_a(Id, Context);
 m_find_value(image, #m{value={cat, Id}}, Context) ->
     image(Id, Context);
 m_find_value(all_flat, #m{value={cat, Id}}, Context) ->
@@ -504,12 +507,10 @@ ranges(CatList0, Context) ->
     merge_ranges([], Acc) ->
         Acc;
     merge_ranges([{A,B},{C,D}|T], Acc) when C =< B+1 ->
-        merge_ranges([{A,max(B,D)}|T], Acc);
+        merge_ranges([{A,erlang:max(B,D)}|T], Acc);
     merge_ranges([H|T], Acc) ->
         merge_ranges(T, [H|Acc]).
 
-    max(A,B) when A > B -> A;
-    max(_,B) -> B.
 
 
 %% @doc Return a flattened representation of the complete category tree.  Can be used for overviews or select boxes.
@@ -670,6 +671,7 @@ renumber_transaction(Context) ->
                 , Context)
         || {CatId, Nr, Level, Left, Right, Path} <- Enums
     ],
+    set_tree_dirty(true, Context),
     z_pivot_rsc:insert_task_after(10, ?MODULE, renumber_pivot_task, "m_category:renumber", [], Context),
     ok.
 
@@ -680,9 +682,11 @@ renumber_pivot_task(Context) ->
                  where c.id = r.category_id
                    and (r.pivot_category_nr is null or r.pivot_category_nr <> c.nr)
                  order by r.id
-                 limit 500", Context),
+                 limit 1000", Context),
     case Nrs of
         [] ->
+            ?zInfo("Category renumbering completed.", Context),
+            set_tree_dirty(false, Context),
             ok;
         Ids ->
             ok = z_db:transaction(fun(Ctx) ->
@@ -694,7 +698,7 @@ renumber_pivot_task(Context) ->
                         || {Id,CatNr} <- Ids
                     ],
                     ok
-                end, Context),
+                                  end, Context),
             {delay, 1}
     end.
 
@@ -751,3 +755,16 @@ boundaries(CatId, Context) ->
 				end
         end,
     z_depcache:memo(F, {category_bounds, CatId}, ?WEEK, [CatId, category], Context).
+
+
+%% @doc Whether the category tree is currently marked dirty (e.g. resource pivot numbers are being updated)
+is_tree_dirty(Context) ->
+    case m_config:get(?MODULE, meta, Context) of
+        undefined -> false;
+        Props ->
+            proplists:get_value(tree_dirty, Props, false)
+    end.
+
+%% @doc Set the tree dirty flag
+set_tree_dirty(Flag, Context) when Flag =:= true; Flag =:= false ->
+    m_config:set_prop(?MODULE, meta, tree_dirty, Flag, Context).

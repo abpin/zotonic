@@ -1,6 +1,5 @@
 %% @author Marc Worrell <marc@worrell.nl>
 %% @copyright 2010 Marc Worrell
-%% Date: 2010-05-07
 %% @doc Log on an user. Set optional "rememberme" cookie.
 
 %% Copyright 2010 Marc Worrell
@@ -26,7 +25,7 @@
 -export([event/2]).
 -export([get_rememberme_cookie/1, reset_rememberme_cookie/1]).
 
--include_lib("webmachine_controller.hrl").
+-include_lib("controller_webmachine_helper.hrl").
 -include_lib("include/zotonic.hrl").
 
 -define(LOGON_REMEMBERME_COOKIE, "z_logon").
@@ -47,26 +46,31 @@ content_types_provided(ReqData, Context) ->
     {[{"text/html", provide_content}], ReqData, Context}.
 
 
-
 resource_exists(ReqData, Context) ->
     Context1 = ?WM_REQ(ReqData, Context),
     Context2 = z_context:ensure_all(Context1),
-    case z_auth:is_auth(Context2) of
+    case z_convert:to_bool(z_context:get(is_only_anonymous, Context2)) of
+        true -> check_auth(Context2);
+        false -> ?WM_REPLY(true, Context2)
+    end.
+
+check_auth(Context) ->
+    case z_auth:is_auth(Context) of
         true ->
-            case z_context:get_q("p", Context2, []) of
-                [] -> ?WM_REPLY(false, Context2);
-                _P -> ?WM_REPLY(true, Context2)
+            case z_utils:is_empty(z_context:get_q("p", Context, [])) of
+                true -> ?WM_REPLY(false, Context);
+                false -> ?WM_REPLY(true, Context)
             end;
         false ->
-            case get_rememberme_cookie(Context2) of
+            case get_rememberme_cookie(Context) of
                 {ok, UserId} ->
-                    Context3 = z_context:set(user_id, UserId, Context2),
-                    case z_auth:logon(UserId, Context3) of
+                    Context1 = z_context:set(user_id, UserId, Context),
+                    case z_auth:logon(UserId, Context1) of
                         {ok, ContextUser} -> ?WM_REPLY(false, ContextUser);
-                        {error, _Reason} -> ?WM_REPLY(true, Context3)
+                        {error, _Reason} -> ?WM_REPLY(true, Context1)
                     end;
                 undefined ->
-                    ?WM_REPLY(true, Context2)
+                    ?WM_REPLY(true, Context)
             end
     end.
 
@@ -78,29 +82,31 @@ previously_existed(ReqData, Context) ->
 %% the user was already logged on and we don't have a redirect page.
 moved_temporarily(ReqData, Context) ->
     Context1 = ?WM_REQ(ReqData, Context),
-    Context2 = z_context:ensure_all(Context1),
-    Location = z_context:abs_url(cleanup_url(get_page(Context2)), Context2),
-    ?WM_REPLY({true, Location}, Context2).
+    Location = z_context:abs_url(cleanup_url(get_page(Context1)), Context1),
+    ?WM_REPLY({true, Location}, Context1).
 
 
 provide_content(ReqData, Context) ->
     Context1 = ?WM_REQ(ReqData, Context),
-    Context2 = z_context:ensure_all(Context1),
-    Context3 = z_context:set_resp_header("X-Robots-Tag", "noindex", Context2),
-    Secret = z_context:get_q("secret", Context3),
-    Vars = [{page, get_page(Context3)}],
-    Vars1 = case get_by_reminder_secret(Secret, Context3) of
+    Context2 = z_context:set_resp_header("X-Robots-Tag", "noindex", Context1),
+    Secret = z_context:get_q("secret", Context2),
+    Vars = [
+        {page, get_page(Context2)}
+        | z_context:get_all(Context2)
+    ],
+    Vars1 = case get_by_reminder_secret(Secret, Context2) of
                 {ok, UserId} -> 
                     [ {user_id, UserId}, 
                       {secret, Secret},
-                      {username, m_identity:get_username(UserId, Context3)} | Vars ];
+                      {username, m_identity:get_username(UserId, Context2)}
+                      | Vars ];
                 undefined -> 
                     Vars
             end,
-    ErrorUId = z_context:get_q("error_uid", Context3),
+    ErrorUId = z_context:get_q("error_uid", Context2),
     ContextVerify = case ErrorUId /= undefined andalso z_utils:only_digits(ErrorUId) of
-                        false -> Context3;
-                        true -> check_verified(list_to_integer(ErrorUId), Context3)
+                        false -> Context2;
+                        true -> check_verified(list_to_integer(ErrorUId), Context2)
                     end,
     Template = z_context:get(template, ContextVerify, "logon.tpl"),
     Rendered = z_template:render(Template, Vars1, ContextVerify),
@@ -190,22 +196,28 @@ event(#submit{message={logon_confirm, Args}, form="logon_confirm_form"}, Context
     LogonArgs = [{"username", binary_to_list(m_identity:get_username(Context))}
                   | z_context:get_q_all(Context)],
     case z_notifier:first(#logon_submit{query_args=LogonArgs}, Context) of
-        {error, _Reason} ->
-            z_render:wire({show, [{target, "logon_confirm_error"}]}, Context);
         {ok, UserId} when is_integer(UserId) ->
             z_auth:confirm(UserId, Context),
             z_render:wire(proplists:get_all_values(on_success, Args), Context);
-        Other -> ?DEBUG(Other)
+        {error, _Reason} ->
+            z_render:wire({show, [{target, "logon_confirm_error"}]}, Context);
+        undefined ->
+            ?zWarning("Auth module error: #logon_submit{} returned undefined.", Context),
+            z_render:growl_error("Configuration error: please enable a module for #logon_submit{}", Context)
     end;
 
 event(#submit{message=[]}, Context) ->
     Args = z_context:get_q_all(Context),
     case z_notifier:first(#logon_submit{query_args=Args}, Context) of
-        undefined -> logon_error("pwd", Context); % No handler for posted args
-        {error, _Reason} -> logon_error("pw", Context);
+        {ok, UserId} when is_integer(UserId) -> 
+            logon_user(UserId, Context);
+        {error, _Reason} -> 
+            logon_error("pw", Context);
         {expired, UserId} when is_integer(UserId) ->
             logon_stage("password_expired", [{user_id, UserId}, {secret, set_reminder_secret(UserId, Context)}], Context);
-        {ok, UserId} when is_integer(UserId) -> logon_user(UserId, Context)
+        undefined -> 
+            ?zWarning("Auth module error: #logon_submit{} returned undefined.", Context),
+            logon_error("pw", Context)
     end.
 
 logon_error(Reason, Context) ->

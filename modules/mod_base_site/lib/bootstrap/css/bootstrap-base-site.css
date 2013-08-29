@@ -63,6 +63,27 @@ ul.simple-list {
 .meta a {
     font-weight: 200;
 }
+.meta .share-button {
+  margin-left: 5px;
+  float: right;
+}
+.meta .share-button img {
+  height: 18px;
+  margin-top: -7px;
+}
+.meta .btn {
+  margin-left:5px;
+}
+ul.share-page-options {
+  list-style: none;
+  margin: 0;
+  overflow: hidden;
+}
+  ul.share-page-options li {
+    float:left;
+    padding: 10px;
+  }
+
 .content .address {
     border-left: 10px solid #eee;
     padding-left: 10px;
@@ -170,7 +191,12 @@ ul.simple-list {
 form div.row {
     margin-left: -20px;
 }
-
+.alert.z_invalid {
+  display: none;
+}
+form.z_form_invalid .alert.z_invalid {
+    display: block;
+}
 
 .body table {
   max-width: 100%;

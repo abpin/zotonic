@@ -76,14 +76,14 @@ prep_answer_header(Q, _Context) ->
 prep_answer(Q, [], _Context) ->
     prep(Q, []);
 prep_answer(Q, [{_Name, {undefined, Text}}], _Context) ->
-    prep(Q, binstr:split(Text, <<$#>>));
+    prep(Q, binary:split(Text, <<$#>>, [global]));
 prep_answer(Q, [{_Name, {Value, _Text}}], _Context) ->
     prep(Q, [Value]).
 
     prep(Q, Vs) ->
         case z_convert:to_bool(proplists:get_value(is_multiple, Q)) of
             false ->
-                hd(Vs);
+                case Vs of [] -> undefined; _ -> hd(Vs) end;
             true ->
                 [
                     case lists:member(K, Vs) of

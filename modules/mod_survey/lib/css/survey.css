@@ -17,10 +17,26 @@
 }
 
 hr.survey-stop {
-    border-top: 1px dashed #ccc;
-    border-bottom: 2px solid #ccc;
-    color: black;
-    background-color: white;
-    height: 2px;
+    display: none;
+}
+
+.picture-file {
+	display: block;
+}
+
+.picture-preview {
+	margin: 4px 0;
+	width: 128px;
+}
+
+.picture-preview.has-preview {
+	width: 256px;
+}
+
+.alert.z_invalid {
+  display: none;
+}
+form.z_form_invalid .alert.z_invalid {
+    display: block;
 }
 

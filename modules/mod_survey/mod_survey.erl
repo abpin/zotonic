@@ -48,7 +48,8 @@ manage_schema(What, Context) ->
 
 event(#postback{message={survey_start, Args}}, Context) ->
     {id, SurveyId} = proplists:lookup(id, Args),
-    render_update(render_next_page(SurveyId, 1, exact, [], [], Context), Args, Context);
+    Answers = normalize_answers(proplists:get_value(answers, Args)),
+    render_update(render_next_page(SurveyId, 1, exact, Answers, [], Context), Args, Context);
 
 event(#submit{message={survey_next, Args}}, Context) ->
     {id, SurveyId} = proplists:lookup(id, Args),
@@ -77,13 +78,20 @@ event(#postback{message={survey_remove_result, [{id, SurveyId}, {persistent_id, 
         ], Context);
 
 event(#postback{message={admin_show_emails, [{id, SurveyId}]}}, Context) ->
-    [Headers0|Data] = m_survey:survey_results(SurveyId, Context),
-    Headers = lists:map(fun(X) -> list_to_atom(binary_to_list(X)) end, Headers0),
-    All = [lists:zip(Headers, Row) || Row <- Data],
-    z_render:dialog(?__("E-mail addresses", Context),
-                    "_dialog_survey_email_addresses.tpl",
-                    [{id, SurveyId}, {all, All}],
-                    Context).
+    case m_survey:survey_results(SurveyId, Context) of
+        [Headers0|Data] ->
+            Headers = lists:map(fun(X) -> list_to_atom(binary_to_list(X)) end, Headers0),
+            All = [lists:zip(Headers, Row) || Row <- Data],
+            z_render:dialog(?__("E-mail addresses", Context),
+                            "_dialog_survey_email_addresses.tpl",
+                            [{id, SurveyId}, {all, All}],
+                            Context);
+        [] ->
+            z_render:dialog(?__("E-mail addresses", Context),
+                            "_dialog_survey_email_addresses.tpl",
+                            [{id, SurveyId}, {all, []}],
+                            Context)
+    end.
 
 %% @doc Append the possible blocks for a survey's edit page.
 observe_admin_edit_blocks(#admin_edit_blocks{id=Id}, Menu, Context) ->
@@ -95,6 +103,7 @@ observe_admin_edit_blocks(#admin_edit_blocks{id=Id}, Menu, Context) ->
                     {survey_yesno, ?__("Yes/No", Context)},
                     {survey_likert, ?__("Likert", Context)},
                     {survey_thurstone, ?__("Thurstone", Context)},
+                    {survey_category, ?__("Category", Context)},
                     {survey_matching, ?__("Matching", Context)},
                     {survey_narrative, ?__("Narrative", Context)},
                     {survey_short_answer, ?__("Short answer", Context)},
@@ -102,7 +111,9 @@ observe_admin_edit_blocks(#admin_edit_blocks{id=Id}, Menu, Context) ->
                     {survey_country, ?__("Country select", Context)},
                     {survey_button, ?__("Button", Context)},
                     {survey_page_break, ?__("Page break", Context)},
-                    {survey_stop, ?__("Stop", Context)}
+                    {survey_stop, ?__("Stop", Context)},
+                    {survey_upload, ?__("File upload", Context)},
+                    {survey_multiple_choice, ?__("Multiple choice", Context)}
                 ]}
                 | Menu
             ];
@@ -123,6 +134,18 @@ observe_survey_is_submit(#survey_is_submit{block=Q}, _Context) ->
 %%====================================================================
 %% support functions
 %%====================================================================
+
+
+normalize_answers(undefined) -> [];
+normalize_answers(L) -> lists:map(fun normalize_answer/1, L).
+
+normalize_answer(A) when is_atom(A), is_binary(A) -> {z_convert:to_binary(A), <<"1">>};
+normalize_answer({A, undefined}) -> {z_convert:to_binary(A), <<>>};
+normalize_answer({A, true}) -> {z_convert:to_binary(A), <<"1">>};
+normalize_answer({A, false}) -> {z_convert:to_binary(A), <<"0">>};
+normalize_answer({A,V}) -> {z_convert:to_binary(A), z_convert:to_binary(V)};
+normalize_answer([A,V]) -> normalize_answer({A,V}).
+    
 
 render_update(#context{} = RenderContext, _Args, _Context) ->
     RenderContext;
@@ -201,7 +224,9 @@ render_next_page(Id, PageNr, Direction, Answers, History, Context) ->
     end.
 
     get_args(Context) ->
-        Args = [ {z_convert:to_binary(K), z_convert:to_binary(V)} || {K,V} <- z_context:get_q_all_noz(Context) ],
+        Args = [ {z_convert:to_binary(K), z_convert:to_binary(V)} 
+                || {K,V} <- z_context:get_q_all_noz(Context), not is_tuple(V)
+               ],
         Submitter = proplists:get_value(<<"z_submitter">>, Args),
         Buttons = proplists:get_all_values(<<"survey$button">>, Args),
         WithButtons = lists:foldl(fun(B, Acc) -> 
@@ -283,6 +308,10 @@ render_next_page(Id, PageNr, Direction, Answers, History, Context) ->
 
 
 
+    eval_page_jumps(submit, _Answers, _Context) ->
+        submit;
+    eval_page_jumps(stop, _Answers, _Context) ->
+        stop;
     eval_page_jumps({[], _Nr}, _Answers, _Context) ->
         submit;
     eval_page_jumps({[Q|L],Nr} = QsNr, Answers, Context) ->
@@ -388,7 +417,11 @@ render_next_page(Id, PageNr, Direction, Answers, History, Context) ->
             case proplists:get_value(type, Q) of
                 <<"survey_page_break">> -> lists:reverse(Acc);
                 <<"survey_stop">> -> lists:reverse([Q|Acc]);
-                _ -> takepage(L, [Q|Acc])
+                _ ->
+                    case proplists:get_value(name, Q) of
+                        <<"survey_feedback">> ->  takepage(L, Acc);
+                        _ -> takepage(L, [Q|Acc])
+                    end
             end.
 
 is_page_end(Block) ->
@@ -406,7 +439,10 @@ is_button(Block) ->
 %% @todo Check if we are missing any answers
 do_submit(SurveyId, Questions, Answers, Context) ->
     {FoundAnswers, Missing} = collect_answers(Questions, Answers, Context),
-    case z_notifier:first(#survey_submit{id=SurveyId, answers=FoundAnswers, missing=Missing, answers_raw=Answers}, Context) of
+    case z_notifier:first(#survey_submit{id=SurveyId, handler=m_rsc:p(SurveyId, survey_handler, Context),
+                                         answers=FoundAnswers, missing=Missing, answers_raw=Answers}, 
+                          Context)
+    of
         undefined ->
             m_survey:insert_survey_submission(SurveyId, FoundAnswers, Context),
             ok;

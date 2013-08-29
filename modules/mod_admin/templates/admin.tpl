@@ -4,6 +4,13 @@
 
 {% block content %}
         <div>
+            <div class="pull-right">
+                <p class="admin-chapeau">
+                    {_ Logged in as _}
+                    <a href="{% url admin_edit_rsc id=m.acl.user %}">{{ m.acl.user.title }}</a>.
+                </p>
+            </div>
+            
             <h2>{_ Dashboard _}</h2>
 
             <div class="well">
@@ -18,7 +25,7 @@
             </div>
         </div>
 
-        <div class="row">
+        <div class="row-fluid">
             <div class="span6">
                 {# Latest modified texts #}
                 {% include "admin_widget_dashboard_latest.tpl" cat="text" headline=_"Latest modified texts" %}

@@ -12,13 +12,13 @@
 		-->
 
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<meta name="author" content="YOUR NAME HERE &copy; 2012" />
+		<meta name="author" content="YOUR NAME HERE &copy; 2013" />
 
 		{% all include "_html_head.tpl" %}
 
 		{% lib
 			"bootstrap/css/bootstrap.min.css"
-			"bootstrap/css/bootstrap.responsive.min.css"
+			"bootstrap/css/bootstrap-responsive.min.css"
 			"css/jquery.loadmask.css"
 			"css/z-menu.css"
 			"css/project.css"
@@ -32,7 +32,7 @@
 
 			<div class="navbar-inner">
 				<div class="container">
-				<a class="brand" href="/">{{ m.config.site.title.value }} {% if m.config.site.subtitle.value %}{% endif %}</a>
+				<a class="brand" href="/">{{ m.config.site.title.value|default:"Your Zotonic Site" }} {% if m.config.site.subtitle.value %}{% endif %}</a>
 					{# <span>{{ m.config.site.subtitle.value }}</span> #}
 
 					{% menu id=id %}
@@ -66,7 +66,7 @@
 			<div class="row">
 				<div class="span12" id="footer">
 					<div class="pull-right">
-						<p class="footer-blog-title">{_ Website powered by _} <a href="http://zotonic.com">Zotonic</a> {{ m.config.zotonic.version.value }}.</p>
+						<p class="footer-blog-title">{% include "_powered_by_zotonic.tpl" %}</p>
 					</div>
 					{% menu id=id menu_id='footer_menu' %}
 				</div>
@@ -80,6 +80,7 @@
 			"js/apps/z.widgetmanager.js"
 			"js/modules/livevalidation-1.3.js"
 			"js/modules/z.inputoverlay.js"
+			"js/modules/z.dialog.js"
 			"js/modules/jquery.loadmask.js"
 			"js/z.superfish.js"
 		%}

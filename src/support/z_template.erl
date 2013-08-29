@@ -19,8 +19,9 @@
 
 -module(z_template).
 -behaviour(gen_server).
-
 -author("Marc Worrell <marc@worrell.nl>").
+
+-compile([{parse_transform, lager_transform}]).
 
 %% gen_server exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -81,31 +82,30 @@ render(#render{} = Render, Context) ->
 %% The resulting list contains the rendered template and scomp contexts.  Use render_to_iolist/3 to get a iolist().
 render({cat, File}, Variables, Context) ->
     case find_template_cat(File, proplists:get_value(id, Variables), Context) of
-        {ok, FoundFileOrModuleIndex} -> 
-            render1(File, FoundFileOrModuleIndex, Variables, Context);
+        {ok, ModuleIndex} -> 
+            render1(File, ModuleIndex, Variables, Context);
         {error, Reason} ->
             lager:info("Could not find template: ~s (~p)", [File, Reason]),
             throw({error, {template_not_found, File, Reason}})
     end;
 render(#module_index{} = M, Variables, Context) ->
     render1(M#module_index.filepath, M, Variables, Context);
+render(File, Variables, Context) when is_binary(File) ->
+    render(z_convert:to_list(File), Variables, Context);
 render(File, Variables, Context) ->
-    File1 = z_convert:to_list(File),
-    case find_template(File1, Context) of
-        {ok, ModuleIndexOrList} ->
-            render1(File1, ModuleIndexOrList, Variables, Context);
+    case find_template(File, Context) of
+        {ok, ModuleIndex} ->
+            render1(File, ModuleIndex, Variables, Context);
         {error, Reason} ->
-            lager:info("Could not find template: ~s (~p)", [File1, Reason]),
-            throw({error, {template_not_found, File1, Reason}})
+            lager:info("Could not find template: ~s (~p)", [File, Reason]),
+            throw({error, {template_not_found, File, Reason}})
     end.
 
     %% Render the found template
     render1(File, #module_index{filepath=FoundFile, erlang_module=undefined}, Variables, Context) ->
-        render1(File, FoundFile, Variables, Context);
-    render1(File, #module_index{filepath=FoundFile, erlang_module=Module}, Variables, Context) ->
-        render1(File, FoundFile, Module, Variables, Context);
-    render1(File, FoundFile, Variables, Context) ->
         Module = filename_to_modulename(FoundFile, Context),
+        render1(File, FoundFile, Module, Variables, Context);
+    render1(File, #module_index{filepath=FoundFile, erlang_module=Module}, Variables, Context) ->
         render1(File, FoundFile, Module, Variables, Context).
         
     render1(File, FoundFile, Module, Variables, Context) ->
@@ -120,7 +120,7 @@ render(File, Variables, Context) ->
                 case Module:render(Variables, Context) of
                     {ok, Output}   -> 
                         z_depcache:in_process(OldCaching),
-                        Output;
+                        runtime_wrap_debug_comments(FoundFile, Output, Context);
                     {error, Reason} ->
                         z_depcache:in_process(OldCaching),
                         lager:error("Error rendering template: ~p (~p)~n", [FoundFile, Reason]),
@@ -168,12 +168,11 @@ compile(File, FoundFile, Module, Context) ->
 
 %% @spec find_template(File, Context) -> {ok, filename()} | {ok, #module_index{}} | {error, code} 
 %% @doc Finds the template designated by the file, check modules.
-%% When the file is an absolute path, then do nothing and assume the file exists.
-%% @todo Only compile abs path templates iff the template is contained in a templates directory. 
-find_template([$/|_] = File, _Context) ->
-    {ok, File};
-find_template([_,$:,$/|_] = File, _Context) ->
-    {ok, File};
+%% When the file is tagged with 'abs' path, then do nothing and assume the file exists.
+find_template({abs, File}, _Context) ->
+    {ok, #module_index{filepath=File}};
+find_template(#module_index{} = ModuleIndex, _Context) ->
+    {ok, ModuleIndex};
 find_template(File, Context) ->
     z_module_indexer:find(template, File, Context).
 
@@ -196,12 +195,16 @@ find_template_cat([$/|_] = File, _Id, _Context) ->
     {ok, File};
 find_template_cat(File, None, Context) when None =:= <<>>; None =:= undefined; None =:= [] ->
     find_template(File, Context);
+find_template_cat(File, [Item|_]=Stack, Context) when is_atom(Item) ->
+    find_template_cat_stack(File, Stack, Context);
 find_template_cat(File, Id, Context) ->
     Stack = case {m_rsc:is_a(Id, Context), m_rsc:p(Id, name, Context)} of
                 {L, undefined} -> L;
-                {[meta, category|_] = L, _Name} -> L;
                 {L, Name} -> L ++ [z_convert:to_atom(Name)]
             end,
+    find_template_cat_stack(File, Stack, Context).
+
+find_template_cat_stack(File, Stack, Context) ->
     Root = z_convert:to_list(filename:rootname(File)),
     Ext = z_convert:to_list(filename:extension(File)),
     case lists:foldr(fun(Cat, {error, enoent}) ->
@@ -258,7 +261,7 @@ handle_call({compile, File, FoundFile, Module, Context}, _From, State) ->
                     [
                         case F of
                             #module_index{filepath=FP} -> FP;
-                            FP -> FP
+                            {abs, FP} -> FP
                         end
                         || F <- ?MODULE:find_template(FinderFile, All, Context)
                     ]
@@ -266,7 +269,10 @@ handle_call({compile, File, FoundFile, Module, Context}, _From, State) ->
     ErlyResult = case erlydtl:compile(  FoundFile,
                                         File,
                                         Module, 
-                                        [{finder, FinderFun}, {template_reset_counter, State#state.reset_counter}],
+                                        [{finder, FinderFun}, {template_reset_counter, State#state.reset_counter},
+                                         {debug_includes, get_debug_includes(Context)},
+                                         {debug_blocks, get_debug_blocks(Context)}
+                                        ],
                                         Context) of
                     {ok, Module1} -> {ok, Module1};
                     Error -> Error
@@ -348,3 +354,25 @@ is_modified([{File, DateTime}|Rest]) ->
         _ ->
             is_modified(Rest)
     end.
+
+
+get_debug_includes(Context) ->
+    z_convert:to_bool(m_config:get_value(mod_development, debug_includes, Context)).
+    
+get_debug_blocks(Context) ->
+    z_convert:to_bool(m_config:get_value(mod_development, debug_blocks, Context)).
+    
+
+runtime_wrap_debug_comments(FilePath, Output, Context) ->
+    case get_debug_includes(Context) of
+        false ->
+            Output;
+        true ->
+            Start = "\n<!-- START " ++ relpath(FilePath) ++ " (runtime) -->\n",
+            End = "\n<!-- END " ++ relpath(FilePath) ++ " -->\n",
+            [Start, Output, End]
+    end.
+
+relpath(FilePath) ->
+    Base = os:getenv("ZOTONIC"),
+    lists:nthtail(1+length(Base), FilePath).

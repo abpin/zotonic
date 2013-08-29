@@ -3,12 +3,12 @@
 Anatomy of a site
 =================
 
-Zotonic has the capability of serving more than one site at the same
-time. You can have multiple sites enabled, each which have their own
-set of templates, has its own database and its own URL dispatch rules.
+Zotonic has the capability of serving more than one site at a
+time. You can have multiple sites enabled, each with its own set of
+templates, database and URL dispatch rules.
 
 A Zotonic site is defined as a folder which lives in the priv/sites
-directory of the zotonic installation (or on a location which is
+directory of the zotonic installation (or in a location which is
 symlinked to this folder, see the tip below).
 
 A site's folder contains at least the following:
@@ -21,9 +21,9 @@ simple Erlang atom: it should be lowercase and only contain letters,
 numbers and the underscore character.
 
 Internally, sites are treated no different from a :ref:`Zotonic module
-<manual-module-structure>`, in fact, they function in an identical
-way, and, as such, can contain all kinds of resources (templates,
-dispatch rules, etc) that a normal module also has. The only
+<manual-module-structure>`. In fact, they function in an identical
+way, and as such, can contain all kinds of resources (templates,
+dispatch rules, etc.) that a normal module also has. The only
 difference is that site names do not need to be prefixed with `mod_`
 and sites have an extra ``config`` file in their base directory. A
 site's ``mod_prio`` metadata attribute is usually set to ``1``, to
@@ -55,6 +55,13 @@ The following options can be configured:
   environment variable, which, when absent, default to port 8000.
   Zotonic can (currently) listen on one TCP port for HTTP
   connections. For HTTPS, see the :ref:`mod_ssl` chapter.
+
+``{protocol, "http"}``
+  This is useful for when the Zotonic is running behind a proxy
+  (like Varnish or haproxy) and the proxy translates between 
+  HTTPS (as seen by the browser) and HTTP (as seen by Zotonic).
+  Setting this config key to "https" ensures that redirect locations
+  have the correct HTTPS protocol.
 
 ``{hostalias, "www.example.com"}``
   The host aliases allow you to specify extra aliases for your
@@ -99,7 +106,12 @@ The following options can be configured:
 
 ``{install_modules, [<modules>...]}``
   List all modules that should be enabled when installing the site data.
-  This overrides the default list of modules installed by the skeleton.
+  This overrides the default list of modules installed by the
+  skeleton.
+.. versionadded:: 0.10
+   To inherit the list of modules from a skeleton, add a ``{skeleton,
+   <name>}`` and it will install the list of modules from that skeleton
+   as well.
 
 ``{smtphost, "..."}``
   Hostname you want e-mail messages to appear from. See :ref:`manual-email`.
@@ -108,13 +120,33 @@ The following options can be configured:
   The hostname that will be used for streaming comet/websocket
   requests. This hostname will be used in the browser for the stream
   connections instead of the main hostname, to circumvent browser
-  limitations on the number of open sockets per host.
+  limitations on the number of open sockets per host. For example::
+
+    {streamhost, "stream.example.com"}
+
+``{websockethost, "..."}``
+  The hostname that will be used for websocket requests. This hostname
+  will be used in the browser for setting up the websocket connection.
+  It can be used to configure a different port number for the websocket
+  connection. For example::
+
+    {websockethost, "example.com:443"}
 
 ``{cookie_domain, "..."}``
   The domain the Zotonic session-id and page-id cookies will be set
   on. Defaults to the main hostname.
 
-  
+.. versionadded:: 0.10
+
+``{installer, <module>}``
+  Override the default zotonic installer (``z_installer``). ``<module>`` should
+  make sure that the database, if used, is setup properly along with any
+  required data. Note that it is ``z_installer`` that is processing the
+  ``install_modules`` and ``install_menu`` options, so if this module is not used
+  then those menus and modules will not be installed unless the new module
+  performs those operations.
+
+
 Database connection options
 ...........................
 

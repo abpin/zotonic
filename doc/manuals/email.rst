@@ -24,30 +24,37 @@ bounced messages.
 Site-specific settings
 ......................
 
-+----------+--------------+-----------------------------------------+
-|Module    |Key           |Value                                    |
-+==========+==============+=========================================+
-|site      |email_from    |Set this to the from-address you want to |
-|          |              |e-mail to appear from, e.g. something    |
-|          |              |like noreply@yoursite.com.               |
-+----------+--------------+-----------------------------------------+
-|site      |email_override|If set, all e-mail messages that get sent|
-|          |              |from Zotonic will arrive at this         |
-|          |              |address. Usefull if you are testing but  |
-|          |              |don't want to confuse other people with  |
-|          |              |your test e-mails.                       |
-+----------+--------------+-----------------------------------------+
-|site      |smtphost      |The hostname where you want messages to  |
-|          |              |appear from. Mostly used for bounce      |
-|          |              |message handling and the EHLO            |
-|          |              |handshake. Defaults to the site's        |
-|          |              |hostname, but can be overriden           |
-+----------+--------------+-----------------------------------------+
-|site      |admin_email   |E-mail address of the admin user, the    |
-|          |              |address where admin log/debug messages   |
-|          |              |get sent to when using                   |
-|          |              |``z_email:send_admin/3``.                |
-+----------+--------------+-----------------------------------------+
++----------+----------------------+-----------------------------------------+
+|Module    |Key                   |Value                                    |
++==========+======================+=========================================+
+|site      |email_from            |Set this to the from-address you want to |
+|          |                      |e-mail to appear from, e.g. something    |
+|          |                      |like noreply@yoursite.com.               |
++----------+----------------------+-----------------------------------------+
+|site      |email_override        |If set, all e-mail messages that get sent|
+|          |                      |from Zotonic will arrive at this         |
+|          |                      |address. Usefull if you are testing but  |
+|          |                      |don't want to confuse other people with  |
+|          |                      |your test e-mails.                       |
++----------+----------------------+-----------------------------------------+
+|site      |smtphost              |The hostname where you want messages to  |
+|          |                      |appear from. Mostly used for bounce      |
+|          |                      |message handling and the EHLO            |
+|          |                      |handshake. Defaults to the site's        |
+|          |                      |hostname, but can be overriden           |
++----------+----------------------+-----------------------------------------+
+|site      |admin_email           |E-mail address of the admin user, the    |
+|          |                      |address where admin log/debug messages   |
+|          |                      |get sent to when using                   |
+|          |                      |``z_email:send_admin/3``.                |
++----------+----------------------+-----------------------------------------+
+|site      |bounce_email_override |E-mail address where bounces are sent to.|
+|          |                      |Normally a special bounce address is     |
+|          |                      |generated. See also the discussion about |
+|          |                      |``smtp_bounce_email_override`` below.    |
++----------+----------------------+-----------------------------------------+
+
+
 
 The ``z_email:send_admin/3`` command actually looks in three different
 places for determining the admin e-mail address: the config key
@@ -62,48 +69,58 @@ The file ``priv/config`` can be configured to hold any of the
 configuration options below. They are in effect for every site running
 in the Zotonic instance.
 
-+------------------+--------------------------------------+
-|Key               |Description                           |
-+==================+======================================+
-|smtp_relay        |Whether or not to use a SMTP relay    |
-|                  |host. Boolean value, defaults to      |
-|                  |false.                                |
-+------------------+--------------------------------------+
-|smtp_host         |The hostname for the SMTP relay host, |
-|                  |only needed if smtp_relay is enabled. |
-+------------------+--------------------------------------+
-|smtp_ssl          |Whether or not to use SSL on the relay|
-|                  |host, only needed if smtp_relay is    |
-|                  |enabled.                              |
-+------------------+--------------------------------------+
-|smtp_username     |The username for the relay host, only |
-|                  |needed if smtp_relay is enabled.      |
-+------------------+--------------------------------------+
-|smtp_password     |The password for the relay host, only |
-|                  |needed if smtp_relay is enabled.      |
-+------------------+--------------------------------------+
-|smtp_no_mx_lookups|Set to true to not do a MX lookup     |
-|                  |before sending mail. (default: false) |
-+------------------+--------------------------------------+
-|smtp_verp_as_from |Use the "from" address as VERP for    |
-|                  |bounce handling (default: false)      |
-+------------------+--------------------------------------+
-|smtp_bcc          |Optionally send a BCC of every sent to|
-|                  |this address                          |
-+------------------+--------------------------------------+
-|email_override    |A global e-mail override. The override|
-|                  |logic first checks the site override, |
-|                  |and then the global override address. |
-+------------------+--------------------------------------+
-|smtp_spamd_ip     |Optional IP address for a spamassassin|
-|                  |host                                  |
-+------------------+--------------------------------------+
-|smtp_spamd_port   |Optional port number for a            |
-|                  |spamassassin host                     |
-+------------------+--------------------------------------+
-|smtp_bounce_domain|Which domain to use for bounce VERP   |
-|                  |messages. Defaults to the smtp domain.|
-+------------------+--------------------------------------+
++--------------------------+--------------------------------------+
+|Key                       |Description                           |
++==========================+======================================+
+|smtp_relay                |Whether or not to use a SMTP relay    |
+|                          |host. Boolean value, defaults to      |
+|                          |false.                                |
++--------------------------+--------------------------------------+
+|smtp_relay_host           |Host name for the relay server.       |
+|                          |Defaults to "localhost".              |
++--------------------------+--------------------------------------+
+|smtp_relay_port           |Port number of the SMTP relay host.   |
+|                          |Defaults to 2525.                     |
++--------------------------+--------------------------------------+
+|smtp_host                 |The hostname for the SMTP relay host, |
+|                          |only needed if smtp_relay is enabled. |
++--------------------------+--------------------------------------+
+|smtp_ssl                  |Whether or not to use SSL on the relay|
+|                          |host, only needed if smtp_relay is    |
+|                          |enabled.                              |
++--------------------------+--------------------------------------+
+|smtp_username             |The username for the relay host, only |
+|                          |needed if smtp_relay is enabled.      |
++--------------------------+--------------------------------------+
+|smtp_password             |The password for the relay host, only |
+|                          |needed if smtp_relay is enabled.      |
++--------------------------+--------------------------------------+
+|smtp_no_mx_lookups        |Set to true to not do a MX lookup     |
+|                          |before sending mail. (default: false) |
++--------------------------+--------------------------------------+
+|smtp_verp_as_from         |Use the "from" address as VERP for    |
+|                          |bounce handling (default: false)      |
++--------------------------+--------------------------------------+
+|smtp_bcc                  |Optionally send a BCC of every sent to|
+|                          |this address                          |
++--------------------------+--------------------------------------+
+|email_override            |A global e-mail override. The override|
+|                          |logic first checks the site override, |
+|                          |and then the global override address. |
++--------------------------+--------------------------------------+
+|smtp_spamd_ip             |Optional IP address for a spamassassin|
+|                          |host                                  |
++--------------------------+--------------------------------------+
+|smtp_spamd_port           |Optional port number for a            |
+|                          |spamassassin host                     |
++--------------------------+--------------------------------------+
+|smtp_bounce_domain        |Which domain to use for bounce VERP   |
+|                          |messages. Defaults to the smtp domain.|
++--------------------------+--------------------------------------+
+|smtp_bounce_email_override|The email address for bounce handling.|
+|                          |Only use when all else fails (see     |
+|                          |the paragraph below).                 |
++--------------------------+--------------------------------------+
 
 
 The sender’s domain
@@ -129,6 +146,17 @@ is delivered at a SMTP server.
 You need a valid domain for this envelope sender address. The part
 before the ``@`` is generated by Zotonic and is used for identifying
 the original message and recipient when the message bounces.
+
+When the generated part is not acceptable then you can force an envelope
+address by setting the ``smtp_bounce_email_override`` option. Setting the
+bounce/envelop address manually disables Zotonic’s build-in handling of
+bounces that happen *after* the e-mail was accepted for delivery by
+the remote SMTP host.
+
+The bounce e-mail address can also be set on a per-site basis using the 
+``site.bounce_email_override`` configuration. See the site specific 
+settings table above.
+
 
 How does Zotonic know the domain?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
